@@ -51,3 +51,25 @@ TextStyle smallText = GoogleFonts.poppins(
   fontWeight: regular,
   color: accentColor,
 );
+
+// Button
+ButtonStyle primaryButton = ElevatedButton.styleFrom(
+  backgroundColor: primaryColor,
+  foregroundColor: backgroundColor,
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  padding: const EdgeInsets.symmetric(vertical: 14),
+  textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: bold),
+);
+
+// Box
+BoxDecoration cardDecoration = BoxDecoration(
+  color: backgroundColor,
+  borderRadius: BorderRadius.circular(16),
+  boxShadow: [
+    BoxShadow(
+      color: shadowColor.withOpacity(0.2),
+      blurRadius: 5,
+      offset: const Offset(0, 3),
+    ),
+  ],
+);
