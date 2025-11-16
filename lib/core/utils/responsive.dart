@@ -6,43 +6,48 @@ double screenWidth(BuildContext context) => MediaQuery.of(context).size.width;
 // Ambil height layar
 double screenHeight(BuildContext context) => MediaQuery.of(context).size.height;
 
-// Cek portrait
+/// responsive width: ambil persen dari layar
+double responsiveWidth(BuildContext context, double percentage) {
+  return screenWidth(context) * percentage;
+}
+
+/// responsive height: ambil persen dari layar
+double responsiveHeight(BuildContext context, double percentage) {
+  return screenHeight(context) * percentage;
+}
+
+/// responsive font: skala mengikuti lebar layar
+double responsiveFont(BuildContext context, double fontSize) {
+  double scale = screenWidth(context) / 390; // normalizing factor
+  return fontSize * scale;
+}
+// Orientation
 bool isPortrait(BuildContext context) =>
     MediaQuery.of(context).orientation == Orientation.portrait;
-
-// Cek landscape
 bool isLandscape(BuildContext context) =>
     MediaQuery.of(context).orientation == Orientation.landscape;
 
-// Skala ukuran layar
+// Scale ukuran berdasarkan width
 double responsiveSize(BuildContext context, double size) {
-  double baseWidth = 375;
+  double baseWidth = 375; // iPhone 11 width
   return size * screenWidth(context) / baseWidth;
 }
 
-// Skala ukuran font
-double responsiveFont(BuildContext context, double fontSize) {
-  double baseWidth = 375;
-  return fontSize * screenWidth(context) / baseWidth;
-}
-
-// Padding
+// Padding responsif
 EdgeInsets responsivePadding(
   BuildContext context, {
   double horizontal = 16,
   double vertical = 16,
 }) {
   if (isLandscape(context)) {
-    // Saat landscape
     return EdgeInsets.symmetric(
-      horizontal: responsiveSize(context, horizontal * 1.5),
-      vertical: responsiveSize(context, vertical * 0.7),
+      horizontal: responsiveSize(context, horizontal * 1.3),
+      vertical: responsiveHeight(context, vertical * 0.7),
     );
   } else {
-    // Default portrait
     return EdgeInsets.symmetric(
       horizontal: responsiveSize(context, horizontal),
-      vertical: responsiveSize(context, vertical),
+      vertical: responsiveHeight(context, vertical),
     );
   }
 }
