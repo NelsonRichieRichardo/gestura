@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:gestura/pages/register.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:gestura/core/utils/responsive.dart';
@@ -17,7 +19,6 @@ class LoginPage extends StatelessWidget {
 
             return Column(
               children: [
-
                 // ============================
                 //        FULL WIDTH IMAGE
                 // ============================
@@ -26,8 +27,8 @@ class LoginPage extends StatelessWidget {
                   child: Center(
                     child: Image.asset(
                       "assets/images/login.png",
-                      width: screenWidth(context),   // stretch penuh lebar
-                      fit: BoxFit.fitWidth,          // tinggi menyesuaikan
+                      width: screenWidth(context), // stretch penuh lebar
+                      fit: BoxFit.fitWidth, // tinggi menyesuaikan
                     ),
                   ),
                 ),
@@ -52,8 +53,9 @@ class LoginPage extends StatelessWidget {
                           Text(
                             "Welcome back,\nMate!!",
                             style: GoogleFonts.poppins(
-                              fontSize:
-                                  isLarge ? 34 : responsiveFont(context, 30),
+                              fontSize: isLarge
+                                  ? 34
+                                  : responsiveFont(context, 30),
                               fontWeight: bold,
                               color: accentColor,
                               height: 1.2,
@@ -63,18 +65,12 @@ class LoginPage extends StatelessWidget {
                           const SizedBox(height: 14),
 
                           // USERNAME INPUT
-                          _inputField(
-                            hint: "Username",
-                            isPassword: false,
-                          ),
+                          _inputField(hint: "Username", isPassword: false),
 
                           const SizedBox(height: 14),
 
                           // PASSWORD INPUT
-                          _inputField(
-                            hint: "Password",
-                            isPassword: true,
-                          ),
+                          _inputField(hint: "Password", isPassword: true),
 
                           const SizedBox(height: 8),
 
@@ -144,6 +140,17 @@ class LoginPage extends StatelessWidget {
                                       fontWeight: bold,
                                       color: accentColor,
                                     ),
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () {
+                                        // Navigate to Register Page
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const RegisterPage(),
+                                          ),
+                                        );
+                                      },
                                   ),
                                 ],
                               ),
@@ -174,8 +181,10 @@ class LoginPage extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         filled: true,
         fillColor: secondaryBackground,
         border: OutlineInputBorder(
@@ -198,10 +207,7 @@ class LoginPage extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: GoogleFonts.poppins(
-            fontSize: 15,
-            fontWeight: bold,
-          ),
+          textStyle: GoogleFonts.poppins(fontSize: 15, fontWeight: bold),
         ),
         child: Text(text),
       ),
@@ -216,13 +222,8 @@ class LoginPage extends StatelessWidget {
         foregroundColor: dark ? Colors.white : Colors.black87,
         elevation: 1,
         padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        textStyle: GoogleFonts.poppins(
-          fontSize: 14,
-          fontWeight: medium,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: medium),
       ),
       child: Text(label),
     );

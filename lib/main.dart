@@ -24,8 +24,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: backgroundColor,
       ),
 
-      home: const RegisterPage(),
+      home: const OnboardingPage(),
     );
   }
 }
-

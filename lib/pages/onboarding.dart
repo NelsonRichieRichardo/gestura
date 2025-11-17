@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gestura/core/utils/responsive.dart';
+import 'package:gestura/pages/login.dart';
+import 'package:gestura/pages/register.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
 
@@ -12,7 +14,11 @@ class OnboardingPage extends StatelessWidget {
     final double sh = screenHeight(context);
 
     // --- Font scaling ---
-    double titleSize = sw < 350 ? 24 : sw < 500 ? 28 : 32;
+    double titleSize = sw < 350
+        ? 24
+        : sw < 500
+        ? 28
+        : 32;
     double subtitleSize = sw < 350 ? 13 : 15;
 
     return Scaffold(
@@ -78,7 +84,12 @@ class OnboardingPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => LoginPage()),
+                    );
+                  },
                   style: primaryButton.copyWith(
                     backgroundColor: MaterialStateProperty.all(primaryColor),
                     foregroundColor: MaterialStateProperty.all(blackColor),
@@ -107,7 +118,12 @@ class OnboardingPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => RegisterPage()),
+                    );
+                  },
                   style: primaryButton.copyWith(
                     backgroundColor: MaterialStateProperty.all(primaryColor),
                     foregroundColor: MaterialStateProperty.all(blackColor),
