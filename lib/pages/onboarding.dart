@@ -3,6 +3,7 @@ import 'package:gestura/pages/login.dart';
 import 'package:gestura/pages/register.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
+import 'package:gestura/components/loading_overlay.dart'; // Import Loading Overlay
 
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
@@ -83,11 +84,18 @@ class OnboardingPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
+                  onPressed: () async {
+                    // Tampilkan Loading
+                    LoadingOverlay.show(context);
+                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
+
+                    await Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => LoginPage()),
+                      MaterialPageRoute(builder: (context) => const LoginPage()),
                     );
+
+                    // Sembunyikan Loading setelah navigasi selesai
+                    LoadingOverlay.hide(context);
                   },
                   style: primaryButton.copyWith(
                     backgroundColor: MaterialStateProperty.all(primaryColor),
@@ -117,11 +125,18 @@ class OnboardingPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
+                  onPressed: () async {
+                    // Tampilkan Loading
+                    LoadingOverlay.show(context);
+                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
+
+                    await Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => RegisterPage()),
+                      MaterialPageRoute(builder: (context) => const RegisterPage()),
                     );
+
+                    // Sembunyikan Loading setelah navigasi selesai
+                    LoadingOverlay.hide(context);
                   },
                   style: primaryButton.copyWith(
                     backgroundColor: MaterialStateProperty.all(primaryColor),

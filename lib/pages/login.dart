@@ -1,9 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:gestura/pages/register.dart'; 
-import 'package:gestura/pages/home.dart'; // Import halaman Home yang baru
+// import 'package:gestura/pages/home.dart'; // <-- BARIS INI KITA HAPUS ATAU KOMENTARI!
+import 'package:gestura/components/loading_overlay.dart'; // Import Loading Overlay
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
+import 'package:gestura/pages/home.dart'; // <-- KITA PINDAHKAN KE SINI (BELUM ADA KONFLIK SEBELUMNYA)
+
 // =================================================================
 // Ubah dari StatelessWidget ke StatefulWidget untuk mengelola state form
 // =================================================================
@@ -82,24 +85,34 @@ class _LoginPageState extends State<LoginPage> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: () {
+        onPressed: () async {
           // Tangkap nilai username
           final username = _usernameController.text.isNotEmpty
               ? _usernameController.text
               : "Pengguna";
 
-          // Bersihkan controller SEBELUM navigasi
+          // 1. Bersihkan controller SEBELUM navigasi
           _usernameController.clear();
           _passwordController.clear();
             
-          // Navigasi ke HomePage (Notifikasi akan ditampilkan di HomePage)
-          // Tidak ada blok .then() atau pemanggilan notifikasi di sini.
-          Navigator.push(
+          // 2. Tampilkan Loading Overlay
+          LoadingOverlay.show(context);
+
+          // Simulasi proses Login/Async Delay (DITINGKATKAN)
+          await Future.delayed(const Duration(milliseconds: 700)); // KONSISTENSI DELAY
+
+          // 3. Navigasi ke HomePage
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => HomePage(username: username),
             ),
           );
+
+          // 4. Sembunyikan Loading Overlay setelah navigasi selesai
+          if (mounted) {
+             LoadingOverlay.hide(context);
+          }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
@@ -142,8 +155,16 @@ class _LoginPageState extends State<LoginPage> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: accentColor),
-          onPressed: () {
+          onPressed: () async {
+            // FIX BUG: Menggunakan async/await agar pop berjalan setelah delay
+            LoadingOverlay.show(context);
+            await Future.delayed(const Duration(milliseconds: 300));
+            
+            // Pop hanya akan mengeluarkan LoginPage jika ada halaman sebelumnya (Onboarding)
             Navigator.pop(context);
+            
+            // Sembunyikan overlay jika masih ada
+            LoadingOverlay.hide(context);
           },
         ),
         title: const Text(''),
@@ -156,9 +177,7 @@ class _LoginPageState extends State<LoginPage> {
 
             return Column(
               children: [
-                // ============================
-                //      FULL WIDTH IMAGE
-                // ============================
+                // ... Konten lainnya (Tidak Berubah) ...
                 Expanded(
                   flex: isLarge ? 3 : 2,
                   child: Center(
@@ -170,9 +189,6 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
 
-                // ============================
-                //      FORM SECTION
-                // ============================
                 Expanded(
                   flex: 3,
                   child: SingleChildScrollView(
@@ -186,7 +202,6 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           SizedBox(height: isLarge ? 10 : 20),
 
-                          // TITLE
                           Text(
                             "Welcome back,\nMate!!",
                             style: GoogleFonts.poppins(
@@ -201,20 +216,18 @@ class _LoginPageState extends State<LoginPage> {
 
                           const SizedBox(height: 14),
 
-                          // USERNAME INPUT
                           _inputField(
                             hint: "Username",
                             isPassword: false,
-                            controller: _usernameController, // Gunakan controller
+                            controller: _usernameController,
                           ),
 
                           const SizedBox(height: 14),
 
-                          // PASSWORD INPUT (dengan logo mata)
                           _inputField(
                             hint: "Password",
                             isPassword: true,
-                            controller: _passwordController, // Gunakan controller
+                            controller: _passwordController,
                           ),
 
                           const SizedBox(height: 8),
@@ -232,7 +245,6 @@ class _LoginPageState extends State<LoginPage> {
 
                           const SizedBox(height: 5),
 
-                          // LOGIN BUTTON (menuju Home)
                           _primaryButton("Login"),
 
                           const SizedBox(height: 10),
@@ -286,14 +298,21 @@ class _LoginPageState extends State<LoginPage> {
                                       color: accentColor,
                                     ),
                                     recognizer: TapGestureRecognizer()
-                                      ..onTap = () {
-                                        Navigator.push(
+                                      ..onTap = () async {
+                                        // Tampilkan Loading Overlay sebelum navigasi ke Register
+                                        LoadingOverlay.show(context);
+                                        await Future.delayed(const Duration(milliseconds: 700));
+
+                                        await Navigator.push(
                                           context,
                                           MaterialPageRoute(
                                             builder: (context) =>
                                                 const RegisterPage(),
                                           ),
                                         );
+                                        
+                                        // Sembunyikan Loading Overlay setelah kembali/berpindah
+                                        LoadingOverlay.hide(context);
                                       },
                                   ),
                                 ],
