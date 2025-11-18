@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gestura/core/themes/app_theme.dart';
-import 'package:gestura/core/utils/responsive.dart';
 
 class CustomTextfield extends StatelessWidget {
   final String hintText;
@@ -26,11 +25,12 @@ class CustomTextfield extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // NOTE: Semua responsiveSize diganti dengan responsiveFont untuk penskalaan yang tepat.
     return Container(
-      margin: EdgeInsets.only(bottom: responsiveSize(context, 14)),
+      margin: EdgeInsets.only(bottom: responsiveFont(context, 14)),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(responsiveSize(context, 12)),
+        borderRadius: BorderRadius.circular(responsiveFont(context, 12)),
         boxShadow: [
           BoxShadow(
             color: shadowColor.withOpacity(0.15),
@@ -50,7 +50,7 @@ class CustomTextfield extends StatelessWidget {
           hintStyle: smallText.copyWith(color: greyColor),
           prefixIcon: prefixIcon != null
               ? Padding(
-                  padding: EdgeInsets.all(responsiveSize(context, 10)),
+                  padding: EdgeInsets.all(responsiveFont(context, 10)),
                   child: Icon(prefixIcon, color: primaryColor),
                 )
               : null,
@@ -58,17 +58,17 @@ class CustomTextfield extends StatelessWidget {
               ? GestureDetector(
                   onTap: onSuffixTap,
                   child: Padding(
-                    padding: EdgeInsets.all(responsiveSize(context, 10)),
+                    padding: EdgeInsets.all(responsiveFont(context, 10)),
                     child: Icon(suffixIcon, color: primaryColor),
                   ),
                 )
               : null,
           contentPadding: EdgeInsets.symmetric(
-            horizontal: responsiveSize(context, 16),
-            vertical: responsiveSize(context, 14),
+            horizontal: responsiveFont(context, 16),
+            vertical: responsiveFont(context, 14),
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(responsiveSize(context, 12)),
+            borderRadius: BorderRadius.circular(responsiveFont(context, 12)),
             borderSide: BorderSide.none,
           ),
         ),

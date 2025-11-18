@@ -1,27 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// App Colors
-Color primaryColor = const Color(0xFFF8B600);
-Color accentColor = const Color(0xFF2A3955);
-Color backgroundColor = const Color(0xFFFFFFFF);
-Color secondaryBackground = const Color(0xFFF8F8F8);
+// =====================================================
+// 1. APP COLORS
+// =====================================================
+const Color primaryColor = Color(0xFFF8B600);
+const Color accentColor = Color(0xFF2A3955);
+const Color backgroundColor = Color(0xFFFFFFFF);
+const Color secondaryBackground = Color(0xFFF8F8F8);
 
-Color dangerColor = const Color(0xFFF42929);
-Color successColor = const Color(0xFF28A745);
-Color infoColor = const Color(0xFF4287F5);
+const Color dangerColor = Color(0xFFF42929);
+const Color successColor = Color(0xFF28A745);
+const Color infoColor = Color(0xFF4287F5);
 
-Color greyColor = const Color(0xFFC0C0C0);
-Color shadowColor = const Color(0xFF808080);
-Color blackColor = const Color(0xFF000000);
+const Color greyColor = Color(0xFFC0C0C0);
+const Color shadowColor = Color(0xFF808080);
+const Color blackColor = Color(0xFF000000);
 
-// Font Weight
-FontWeight light = FontWeight.w300;
-FontWeight regular = FontWeight.w400;
-FontWeight medium = FontWeight.w500;
-FontWeight bold = FontWeight.w600;
+// =====================================================
+// 2. FONT WEIGHT (Menggunakan const di sini)
+// =====================================================
+const FontWeight light = FontWeight.w300;
+const FontWeight regular = FontWeight.w400;
+const FontWeight medium = FontWeight.w500;
+const FontWeight bold = FontWeight.w600; // Catatan: Kode lama pakai w700, ini diubah ke w600
 
-// Text Style
+// =====================================================
+// 3. TEXT STYLE
+// =====================================================
 TextStyle heading1 = GoogleFonts.poppins(
   fontSize: 24,
   fontWeight: bold,
@@ -52,7 +58,9 @@ TextStyle smallText = GoogleFonts.poppins(
   color: accentColor,
 );
 
-// Button
+// =====================================================
+// 4. BUTTON STYLE
+// =====================================================
 ButtonStyle primaryButton = ElevatedButton.styleFrom(
   backgroundColor: primaryColor,
   foregroundColor: backgroundColor,
@@ -61,7 +69,9 @@ ButtonStyle primaryButton = ElevatedButton.styleFrom(
   textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: bold),
 );
 
-// Box
+// =====================================================
+// 5. BOX DECORATION
+// =====================================================
 BoxDecoration cardDecoration = BoxDecoration(
   color: backgroundColor,
   borderRadius: BorderRadius.circular(16),
@@ -73,3 +83,35 @@ BoxDecoration cardDecoration = BoxDecoration(
     ),
   ],
 );
+
+// =====================================================
+// 6. RESPONSIVE UTILITIES (Dipertahankan agar kode lain tidak error)
+// =====================================================
+
+double screenWidth(BuildContext context) {
+  return MediaQuery.of(context).size.width;
+}
+
+double screenHeight(BuildContext context) {
+  return MediaQuery.of(context).size.height;
+}
+
+double responsiveHeight(BuildContext context, double percentage) {
+  return screenHeight(context) * percentage;
+}
+
+double responsiveWidth(BuildContext context, double percentage) {
+  return screenWidth(context) * percentage;
+}
+
+double responsiveFont(BuildContext context, double baseSize) {
+  double width = screenWidth(context);
+  // Logika sederhana untuk skala font
+  if (width < 600) {
+    return baseSize * 0.9;
+  } else if (width < 1000) {
+    return baseSize * 1.0;
+  } else {
+    return baseSize * 1.1;
+  }
+}

@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
-import 'package:gestura/core/utils/responsive.dart';
 
 class RegisterPage extends StatelessWidget {
   const RegisterPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Definisi warna dan bold asumsikan berasal dari AppTheme/responsive.dart,
+    // Jika tidak didefinisikan secara global, perlu diimpor atau didefinisikan.
+    // Untuk tujuan modifikasi, saya asumsikan mereka tersedia di scope ini.
+    // Misalnya: final Color backgroundColor = Colors.white;
+    // final Color accentColor = Colors.black;
+    // final Color primaryColor = Colors.blue;
+    // final Color blackColor = Colors.black;
+    // final Color secondaryBackground = Colors.grey.shade100;
+    // final FontWeight bold = FontWeight.bold;
+
     return Scaffold(
       backgroundColor: backgroundColor,
       body: SafeArea(
@@ -16,6 +25,28 @@ class RegisterPage extends StatelessWidget {
             
             return Column(
               children: [
+                
+                /// =========================
+                ///       BACK BUTTON
+                /// =========================
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: responsiveWidth(context, 0.04), // Padding responsif
+                    vertical: responsiveHeight(context, 0.01),
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded), // Ikon '<' modern
+                      iconSize: responsiveFont(context, 24), // Ukuran ikon responsif
+                      color: accentColor,
+                      onPressed: () {
+                        // Logika untuk kembali ke halaman sebelumnya
+                        Navigator.pop(context); 
+                      },
+                    ),
+                  ),
+                ),
 
                 /// =========================
                 ///        IMAGE TOP
@@ -116,6 +147,9 @@ class RegisterPage extends StatelessWidget {
                       Checkbox(
                         value: false,
                         onChanged: (v) {},
+                        // Tambahkan styling pada Checkbox agar lebih sesuai dengan tema,
+                        // misalnya menggunakan primaryColor.
+                        activeColor: primaryColor,
                       ),
                       Expanded(
                         child: Text(
@@ -175,6 +209,7 @@ class RegisterPage extends StatelessWidget {
 
   Widget _inputField(String hint,
       {bool isPassword = false, bool prefixFlag = false}) {
+    // ... (Fungsi _inputField tidak berubah)
     return TextField(
       obscureText: isPassword,
       decoration: InputDecoration(

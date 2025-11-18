@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:gestura/core/utils/responsive.dart';
 import 'package:gestura/pages/login.dart';
 import 'package:gestura/pages/register.dart';
 import 'package:google_fonts/google_fonts.dart';

@@ -1,17 +1,154 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:gestura/pages/register.dart';
+import 'package:gestura/pages/register.dart'; 
+import 'package:gestura/pages/home.dart'; // Import halaman Home yang baru
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
-import 'package:gestura/core/utils/responsive.dart';
-
-class LoginPage extends StatelessWidget {
+// =================================================================
+// Ubah dari StatelessWidget ke StatefulWidget untuk mengelola state form
+// =================================================================
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  // 1. Controller untuk menangkap input teks
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  // 2. State untuk toggle visibilitas password
+  bool _isPasswordVisible = false;
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // =====================================================
+  //                INPUT COMPONENT (MODIFIED)
+  // =====================================================
+  Widget _inputField({
+    required String hint,
+    required bool isPassword,
+    required TextEditingController controller,
+  }) {
+    return TextField(
+      controller: controller,
+      // Tentukan apakah teks harus disembunyikan
+      obscureText: isPassword && !_isPasswordVisible,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        filled: true,
+        fillColor: secondaryBackground,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        // Tambahkan tombol toggle mata hanya jika itu adalah field password
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  _isPasswordVisible
+                      ? Icons.visibility
+                      : Icons.visibility_off,
+                  color: Colors.grey,
+                ),
+                onPressed: () {
+                  // Menggunakan setState untuk mengubah state visibilitas
+                  setState(() {
+                    _isPasswordVisible = !_isPasswordVisible;
+                  });
+                },
+              )
+            : null,
+      ),
+    );
+  }
+
+  // =====================================================
+  //               PRIMARY BUTTON (MODIFIED)
+  // =====================================================
+  Widget _primaryButton(String text) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () {
+          // Tangkap nilai username
+          final username = _usernameController.text.isNotEmpty
+              ? _usernameController.text
+              : "Pengguna";
+
+          // Bersihkan controller SEBELUM navigasi
+          _usernameController.clear();
+          _passwordController.clear();
+            
+          // Navigasi ke HomePage (Notifikasi akan ditampilkan di HomePage)
+          // Tidak ada blok .then() atau pemanggilan notifikasi di sini.
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => HomePage(username: username),
+            ),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: blackColor,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: GoogleFonts.poppins(fontSize: 15, fontWeight: bold),
+        ),
+        child: Text(text),
+      ),
+    );
+  }
+
+  // =====================================================
+  //               SOCIAL BUTTON (UNMODIFIED)
+  // =====================================================
+  Widget _socialButton({required String label, required bool dark}) {
+    return ElevatedButton(
+      onPressed: () {},
+      style: ElevatedButton.styleFrom(
+        backgroundColor: dark ? accentColor : Colors.white,
+        foregroundColor: dark ? Colors.white : Colors.black87,
+        elevation: 1,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: medium),
+      ),
+      child: Text(label),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios, color: accentColor),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+        title: const Text(''),
+        toolbarHeight: 50,
+      ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -20,21 +157,21 @@ class LoginPage extends StatelessWidget {
             return Column(
               children: [
                 // ============================
-                //        FULL WIDTH IMAGE
+                //      FULL WIDTH IMAGE
                 // ============================
                 Expanded(
                   flex: isLarge ? 3 : 2,
                   child: Center(
                     child: Image.asset(
                       "assets/images/login.png",
-                      width: screenWidth(context), // stretch penuh lebar
-                      fit: BoxFit.fitWidth, // tinggi menyesuaikan
+                      width: screenWidth(context),
+                      fit: BoxFit.fitWidth,
                     ),
                   ),
                 ),
 
                 // ============================
-                //        FORM SECTION
+                //      FORM SECTION
                 // ============================
                 Expanded(
                   flex: 3,
@@ -65,12 +202,20 @@ class LoginPage extends StatelessWidget {
                           const SizedBox(height: 14),
 
                           // USERNAME INPUT
-                          _inputField(hint: "Username", isPassword: false),
+                          _inputField(
+                            hint: "Username",
+                            isPassword: false,
+                            controller: _usernameController, // Gunakan controller
+                          ),
 
                           const SizedBox(height: 14),
 
-                          // PASSWORD INPUT
-                          _inputField(hint: "Password", isPassword: true),
+                          // PASSWORD INPUT (dengan logo mata)
+                          _inputField(
+                            hint: "Password",
+                            isPassword: true,
+                            controller: _passwordController, // Gunakan controller
+                          ),
 
                           const SizedBox(height: 8),
 
@@ -87,7 +232,7 @@ class LoginPage extends StatelessWidget {
 
                           const SizedBox(height: 5),
 
-                          // LOGIN BUTTON
+                          // LOGIN BUTTON (menuju Home)
                           _primaryButton("Login"),
 
                           const SizedBox(height: 10),
@@ -142,7 +287,6 @@ class LoginPage extends StatelessWidget {
                                     ),
                                     recognizer: TapGestureRecognizer()
                                       ..onTap = () {
-                                        // Navigate to Register Page
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
@@ -168,64 +312,6 @@ class LoginPage extends StatelessWidget {
           },
         ),
       ),
-    );
-  }
-
-  // =====================================================
-  //                    COMPONENTS
-  // =====================================================
-
-  Widget _inputField({required String hint, required bool isPassword}) {
-    return TextField(
-      obscureText: isPassword,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
-        ),
-        filled: true,
-        fillColor: secondaryBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  Widget _primaryButton(String text) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: () {},
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
-          foregroundColor: blackColor,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: GoogleFonts.poppins(fontSize: 15, fontWeight: bold),
-        ),
-        child: Text(text),
-      ),
-    );
-  }
-
-  Widget _socialButton({required String label, required bool dark}) {
-    return ElevatedButton(
-      onPressed: () {},
-      style: ElevatedButton.styleFrom(
-        backgroundColor: dark ? accentColor : Colors.white,
-        foregroundColor: dark ? Colors.white : Colors.black87,
-        elevation: 1,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: medium),
-      ),
-      child: Text(label),
     );
   }
 }

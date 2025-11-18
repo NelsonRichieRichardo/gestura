@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gestura/core/themes/app_theme.dart';
-import 'package:gestura/core/utils/responsive.dart';
 
 class CustomButton extends StatelessWidget {
   final String text;
