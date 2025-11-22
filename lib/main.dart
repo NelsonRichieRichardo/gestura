@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gestura/pages/register.dart';
 import 'core/themes/app_theme.dart';
 import 'pages/onboarding.dart';
-import 'pages/login.dart';
-import 'pages/register.dart';
 
 void main() {
   runApp(const MyApp());
