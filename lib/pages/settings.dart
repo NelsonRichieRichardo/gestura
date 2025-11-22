@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:gestura/components/loading_overlay.dart';
+import 'package:gestura/pages/privacy_policy.dart';
+import 'package:gestura/pages/profile.dart';
+import 'package:gestura/pages/terms_conditions.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:gestura/pages/login.dart'; // Untuk Logout
@@ -40,23 +44,57 @@ class SettingsPage extends StatelessWidget {
                     title: "Privacy Policy", 
                     icon: Icons.description, 
                     iconColor: dangerColor,
-                    onTap: () {},
+                    onTap: () async {
+                    // Tampilkan Loading
+                    LoadingOverlay.show(context);
+                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
+
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PrivacyPolicyPage()),
+                    );
+
+                    // Sembunyikan Loading setelah navigasi selesai
+                    LoadingOverlay.hide(context);
+                  },
                   ),
                   _buildSettingItem(
                     context, 
                     title: "Terms and Condition", 
                     icon: Icons.gavel, 
                     iconColor: successColor,
-                    onTap: () {},
+                    onTap: () async {
+                    // Tampilkan Loading
+                    LoadingOverlay.show(context);
+                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
+
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const TermsAndConditionsPage()),
+                    );
+
+                    // Sembunyikan Loading setelah navigasi selesai
+                    LoadingOverlay.hide(context);
+                  },
                   ),
                   _buildSettingItem(
                     context, 
                     title: "Profile", 
                     icon: Icons.person, 
                     iconColor: infoColor,
-                    onTap: () {
-                      // Simulasikan navigasi ke halaman detail Profile (jika ada)
-                    },
+                    onTap: () async {
+                    // Tampilkan Loading
+                    LoadingOverlay.show(context);
+                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
+
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ProfilePage()),
+                    );
+
+                    // Sembunyikan Loading setelah navigasi selesai
+                    LoadingOverlay.hide(context);
+                  },
                   ),
                 ],
               ),
