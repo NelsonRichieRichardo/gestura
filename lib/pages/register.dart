@@ -1,9 +1,9 @@
-import 'package:flutter/gestures.dart'; 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:gestura/core/utils/country_data.dart';
-import 'package:gestura/components/loading_overlay.dart'; 
+import 'package:gestura/components/loading_overlay.dart';
 import 'package:gestura/pages/login.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -23,7 +23,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   @override
   void dispose() {
@@ -38,8 +39,12 @@ class _RegisterPageState extends State<RegisterPage> {
   // ======================================================
   //                INPUT COMPONENT (UNMODIFIED)
   // ======================================================
-  Widget _inputField(String hint, TextEditingController controller,
-      {bool isPassword = false, bool isMobileNumber = false}) {
+  Widget _inputField(
+    String hint,
+    TextEditingController controller, {
+    bool isPassword = false,
+    bool isMobileNumber = false,
+  }) {
     return TextField(
       controller: controller,
       obscureText: isPassword,
@@ -47,16 +52,16 @@ class _RegisterPageState extends State<RegisterPage> {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
-        
+
         // Custom Prefix Icon untuk Mobile Number (Pemilih Bendera)
-        prefixIcon: isMobileNumber
-            ? _buildCountryPicker()
-            : null,
-            
+        prefixIcon: isMobileNumber ? _buildCountryPicker() : null,
+
         filled: true,
         fillColor: secondaryBackground,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -73,7 +78,11 @@ class _RegisterPageState extends State<RegisterPage> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<Country>(
           value: selectedCountry,
-          icon: Icon(Icons.keyboard_arrow_down_rounded, size: responsiveFont(context, 20), color: Colors.grey),
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: responsiveFont(context, 20),
+            color: Colors.grey,
+          ),
           style: GoogleFonts.poppins(
             fontSize: responsiveFont(context, 14),
             color: accentColor,
@@ -86,12 +95,17 @@ class _RegisterPageState extends State<RegisterPage> {
               });
             }
           },
-          items: availableCountries.map<DropdownMenuItem<Country>>((Country country) {
+          items: availableCountries.map<DropdownMenuItem<Country>>((
+            Country country,
+          ) {
             return DropdownMenuItem<Country>(
               value: country,
               child: Row(
                 children: [
-                  Text(country.flag, style: TextStyle(fontSize: responsiveFont(context, 18))),
+                  Text(
+                    country.flag,
+                    style: TextStyle(fontSize: responsiveFont(context, 18)),
+                  ),
                   const SizedBox(width: 4),
                   Text(country.dialCode),
                 ],
@@ -102,7 +116,7 @@ class _RegisterPageState extends State<RegisterPage> {
       ),
     );
   }
-  
+
   // ======================================================
   //                    BUILD METHOD
   // ======================================================
@@ -115,13 +129,12 @@ class _RegisterPageState extends State<RegisterPage> {
         child: SingleChildScrollView(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              
               return Column(
                 children: [
-                  // Back Button 
+                  // Back Button
                   Padding(
                     padding: EdgeInsets.symmetric(
-                      horizontal: responsiveWidth(context, 0.04), 
+                      horizontal: responsiveWidth(context, 0.04),
                       vertical: responsiveHeight(context, 0.01),
                     ),
                     child: Align(
@@ -133,7 +146,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         onPressed: () async {
                           // Navigasi kembali dengan loading singkat (300ms)
                           LoadingOverlay.show(context);
-                          await Future.delayed(const Duration(milliseconds: 300));
+                          await Future.delayed(
+                            const Duration(milliseconds: 300),
+                          );
                           Navigator.pop(context);
                         },
                       ),
@@ -144,8 +159,11 @@ class _RegisterPageState extends State<RegisterPage> {
                   ///        IMAGE TOP
                   /// =========================
                   SizedBox(
-                    width: screenWidth(context),          
-                    height: responsiveHeight(context, 0.20), // Dikecilkan agar muat
+                    width: screenWidth(context),
+                    height: responsiveHeight(
+                      context,
+                      0.20,
+                    ), // Dikecilkan agar muat
                     child: Image.asset(
                       "assets/images/register.png",
                       fit: BoxFit.contain,
@@ -177,7 +195,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
                   SizedBox(height: responsiveHeight(context, 0.01)),
 
-
                   /// =========================
                   ///        FORM INPUTS
                   /// =========================
@@ -192,11 +209,23 @@ class _RegisterPageState extends State<RegisterPage> {
                         _inputField("Email Address", _emailController),
                         SizedBox(height: responsiveHeight(context, 0.012)),
                         // FIELD BARU DENGAN PEMILIH BENDERA
-                        _inputField("Mobile Number", _mobileController, isMobileNumber: true),
+                        _inputField(
+                          "Mobile Number",
+                          _mobileController,
+                          isMobileNumber: true,
+                        ),
                         SizedBox(height: responsiveHeight(context, 0.012)),
-                        _inputField("Password", _passwordController, isPassword: true),
+                        _inputField(
+                          "Password",
+                          _passwordController,
+                          isPassword: true,
+                        ),
                         SizedBox(height: responsiveHeight(context, 0.012)),
-                        _inputField("Confirm Password", _confirmPasswordController, isPassword: true),
+                        _inputField(
+                          "Confirm Password",
+                          _confirmPasswordController,
+                          isPassword: true,
+                        ),
                       ],
                     ),
                   ),
@@ -222,25 +251,27 @@ class _RegisterPageState extends State<RegisterPage> {
                             color: accentColor,
                           ),
                           recognizer: TapGestureRecognizer()
-                          ..onTap = () async {
+                            ..onTap = () async {
                               // 1. Tampilkan Loading
                               LoadingOverlay.show(context);
-                              
+
                               // 2. Tunggu Delay (1200ms)
-                              await Future.delayed(const Duration(milliseconds: 1200)); 
-                              
+                              await Future.delayed(
+                                const Duration(milliseconds: 1200),
+                              );
+
                               // 3. Sembunyikan Loading Overlay
                               // Ini harus dipanggil secara eksplisit untuk menghapus overlay dari stack
                               LoadingOverlay.hide(context);
 
                               // 4. Navigasi Pengganti ke LoginPage
-                              await Navigator.pushReplacement( 
+                              await Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const LoginPage(),
                                 ),
                               );
-                          },
+                            },
                         ),
                       ],
                     ),
@@ -294,13 +325,15 @@ class _RegisterPageState extends State<RegisterPage> {
                         onPressed: () async {
                           // Tampilkan Loading Overlay untuk proses registrasi
                           LoadingOverlay.show(context);
-                          await Future.delayed(const Duration(milliseconds: 1200)); // KONSISTENSI: Delay 1200ms
+                          await Future.delayed(
+                            const Duration(milliseconds: 1200),
+                          ); // KONSISTENSI: Delay 1200ms
 
                           // TODO: Ganti ini dengan navigasi sukses ke halaman selanjutnya
                           // Untuk saat ini, kita pop ke halaman sebelumnya (misalnya login)
-                          
-                          Navigator.pop(context); 
-                          
+
+                          Navigator.pop(context);
+
                           // Hapus Loading Overlay secara eksplisit setelah pop
                           LoadingOverlay.hide(context);
                         },
