@@ -1,336 +1,401 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:gestura/pages/register.dart'; 
-// import 'package:gestura/pages/home.dart'; // <-- BARIS INI KITA HAPUS ATAU KOMENTARI!
-import 'package:gestura/components/loading_overlay.dart'; // Import Loading Overlay
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
+
+// Core imports
 import 'package:gestura/core/themes/app_theme.dart';
-import 'package:gestura/pages/home.dart'; // <-- KITA PINDAHKAN KE SINI (BELUM ADA KONFLIK SEBELUMNYA)
+import 'package:gestura/pages/register.dart';
+import 'package:gestura/pages/home.dart';
+import 'package:gestura/components/loading_overlay.dart';
 
-// =================================================================
-// Ubah dari StatelessWidget ke StatefulWidget untuk mengelola state form
-// =================================================================
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+	const LoginPage({super.key});
 
-  @override
-  State<LoginPage> createState() => _LoginPageState();
+	@override
+	State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // 1. Controller untuk menangkap input teks
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+	// =========================================================================
+	// STATE MANAGEMENT
+	// =========================================================================
 
-  // 2. State untuk toggle visibilitas password
-  bool _isPasswordVisible = false;
+	/// Controllers untuk input email dan password.
+	final TextEditingController _emailController = TextEditingController();
+	final TextEditingController _passwordController = TextEditingController();
 
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
+	/// State untuk toggle visibilitas password.
+	bool _isPasswordVisible = false;
 
-  // =====================================================
-  //                INPUT COMPONENT (MODIFIED)
-  // =====================================================
-  Widget _inputField({
-    required String hint,
-    required bool isPassword,
-    required TextEditingController controller,
-  }) {
-    return TextField(
-      controller: controller,
-      // Tentukan apakah teks harus disembunyikan
-      obscureText: isPassword && !_isPasswordVisible,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
-        ),
-        filled: true,
-        fillColor: secondaryBackground,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        // Tambahkan tombol toggle mata hanya jika itu adalah field password
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(
-                  _isPasswordVisible
-                      ? Icons.visibility
-                      : Icons.visibility_off,
-                  color: Colors.grey,
-                ),
-                onPressed: () {
-                  // Menggunakan setState untuk mengubah state visibilitas
-                  setState(() {
-                    _isPasswordVisible = !_isPasswordVisible;
-                  });
-                },
-              )
-            : null,
-      ),
-    );
-  }
+	@override
+	void dispose() {
+		// Pastikan semua controller dibuang.
+		_emailController.dispose();
+		_passwordController.dispose();
+		super.dispose();
+	}
 
-  // =====================================================
-  //               PRIMARY BUTTON (MODIFIED)
-  // =====================================================
-  Widget _primaryButton(String text) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: () async {
-          // Tangkap nilai username
-          final username = _usernameController.text.isNotEmpty
-              ? _usernameController.text
-              : "Pengguna";
+	// =========================================================================
+	// LOGIC / FUNCTION
+	// =========================================================================
 
-          // 1. Bersihkan controller SEBELUM navigasi
-          _usernameController.clear();
-          _passwordController.clear();
-            
-          // 2. Tampilkan Loading Overlay
-          LoadingOverlay.show(context);
+	/// Fungsi utama yang dipanggil saat tombol "Login" ditekan.
+	/// Mengatur validasi, proses login ke Firebase Auth, dan pengambilan data user dari Firestore.
+	Future<void> _handleLogin() async {
+		// A. Validasi Input Kosong
+		if (_emailController.text.trim().isEmpty ||
+				_passwordController.text.trim().isEmpty) {
+			ScaffoldMessenger.of(context).showSnackBar(
+				const SnackBar(content: Text("Please enter email and password")),
+			);
+			return;
+		}
 
-          // Simulasi proses Login/Async Delay (DITINGKATKAN)
-          await Future.delayed(const Duration(milliseconds: 700)); // KONSISTENSI DELAY
+		// B. Tampilkan Loading Overlay
+		LoadingOverlay.show(context);
 
-          // 3. Navigasi ke HomePage
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => HomePage(username: username),
-            ),
-          );
+		try {
+			// C. Proses Login ke Firebase Auth
+			UserCredential userCredential = await FirebaseAuth.instance
+					.signInWithEmailAndPassword(
+				email: _emailController.text.trim(),
+				password: _passwordController.text.trim(),
+			);
 
-          // 4. Sembunyikan Loading Overlay setelah navigasi selesai
-          if (mounted) {
-             LoadingOverlay.hide(context);
-          }
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
-          foregroundColor: blackColor,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: GoogleFonts.poppins(fontSize: 15, fontWeight: bold),
-        ),
-        child: Text(text),
-      ),
-    );
-  }
+			// D. Jika Login Berhasil, Ambil Data Username dari Firestore
+			String uid = userCredential.user!.uid;
+			
+			DocumentSnapshot userDoc = await FirebaseFirestore.instance
+					.collection('users')
+					.doc(uid)
+					.get();
 
-  // =====================================================
-  //               SOCIAL BUTTON (UNMODIFIED)
-  // =====================================================
-  Widget _socialButton({required String label, required bool dark}) {
-    return ElevatedButton(
-      onPressed: () {},
-      style: ElevatedButton.styleFrom(
-        backgroundColor: dark ? accentColor : Colors.white,
-        foregroundColor: dark ? Colors.white : Colors.black87,
-        elevation: 1,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: medium),
-      ),
-      child: Text(label),
-    );
-  }
+			// Default username
+			String username = "Mate"; 
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: accentColor),
-          onPressed: () async {
-            // FIX BUG: Menggunakan async/await agar pop berjalan setelah delay
-            LoadingOverlay.show(context);
-            await Future.delayed(const Duration(milliseconds: 300));
-            
-            // Pop hanya akan mengeluarkan LoginPage jika ada halaman sebelumnya (Onboarding)
-            Navigator.pop(context);
-            
-            // Sembunyikan overlay jika masih ada
-            LoadingOverlay.hide(context);
-          },
-        ),
-        title: const Text(''),
-        toolbarHeight: 50,
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final bool isLarge = constraints.maxHeight > 750;
+			if (userDoc.exists) {
+				// Ambil field 'username' yang disimpan saat Register
+				username = userDoc.get('username') ?? "Mate";
+			}
 
-            return Column(
-              children: [
-                // ... Konten lainnya (Tidak Berubah) ...
-                Expanded(
-                  flex: isLarge ? 3 : 2,
-                  child: Center(
-                    child: Image.asset(
-                      "assets/images/login.png",
-                      width: screenWidth(context),
-                      fit: BoxFit.fitWidth,
-                    ),
-                  ),
-                ),
+			if (!mounted) return;
 
-                Expanded(
-                  flex: 3,
-                  child: SingleChildScrollView(
-                    physics: isLarge
-                        ? const NeverScrollableScrollPhysics()
-                        : const BouncingScrollPhysics(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(height: isLarge ? 10 : 20),
+			// E. Sukses - Tutup Loading & Navigasi ke Home Page
+			LoadingOverlay.hide(context);
 
-                          Text(
-                            "Welcome back,\nMate!!",
-                            style: GoogleFonts.poppins(
-                              fontSize: isLarge
-                                  ? 34
-                                  : responsiveFont(context, 30),
-                              fontWeight: bold,
-                              color: accentColor,
-                              height: 1.2,
-                            ),
-                          ),
+			// Navigasi dengan pushReplacement agar tidak bisa back ke halaman login
+			Navigator.pushReplacement(
+				context,
+				MaterialPageRoute(
+					builder: (context) => HomePage(username: username),
+				),
+			);
 
-                          const SizedBox(height: 14),
+		} on FirebaseAuthException catch (e) {
+			// F. Error Handling Khusus Firebase Authentication
+			if (mounted) {
+				LoadingOverlay.hide(context);
+				String message = "Login failed";
+				
+				if (e.code == 'user-not-found') {
+					message = 'No user found for that email.';
+				} else if (e.code == 'wrong-password') {
+					message = 'Wrong password provided.';
+				} else if (e.code == 'invalid-email') {
+					message = 'The email address is not valid.';
+				} else if (e.code == 'invalid-credential') {
+					// Error umum untuk kombinasi email/password yang salah
+					message = 'Invalid email or password.';
+				}
 
-                          _inputField(
-                            hint: "Username",
-                            isPassword: false,
-                            controller: _usernameController,
-                          ),
+				ScaffoldMessenger.of(context).showSnackBar(
+					SnackBar(
+						content: Text(message),
+						backgroundColor: Colors.red,
+					),
+				);
+			}
+		} catch (e) {
+			// G. Error Umum Lainnya
+			if (mounted) {
+				LoadingOverlay.hide(context);
+				ScaffoldMessenger.of(context).showSnackBar(
+					SnackBar(
+						content: Text("Error: ${e.toString()}"),
+						backgroundColor: Colors.red,
+					),
+				);
+			}
+		}
+	}
 
-                          const SizedBox(height: 14),
+	// =========================================================================
+	// UI COMPONENTS
+	// =========================================================================
 
-                          _inputField(
-                            hint: "Password",
-                            isPassword: true,
-                            controller: _passwordController,
-                          ),
+	/// Template umum untuk input field (Email dan Password).
+	Widget _inputField({
+		required String hint,
+		required bool isPassword,
+		required TextEditingController controller,
+	}) {
+		return TextField(
+			controller: controller,
+			// Menentukan apakah teks disembunyikan
+			obscureText: isPassword && !_isPasswordVisible,
+			decoration: InputDecoration(
+				hintText: hint,
+				hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+				contentPadding: const EdgeInsets.symmetric(
+					horizontal: 16,
+					vertical: 14,
+				),
+				filled: true,
+				fillColor: secondaryBackground,
+				border: OutlineInputBorder(
+					borderRadius: BorderRadius.circular(12),
+					borderSide: BorderSide.none,
+				),
+				// Tombol toggle visibilitas password
+				suffixIcon: isPassword
+						? IconButton(
+								icon: Icon(
+									_isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+									color: Colors.grey,
+								),
+								onPressed: () {
+									setState(() {
+										_isPasswordVisible = !_isPasswordVisible;
+									});
+								},
+							)
+						: null,
+			),
+		);
+	}
 
-                          const SizedBox(height: 8),
+	/// Tombol utama untuk aksi Login.
+	Widget _primaryButton(String text) {
+		return SizedBox(
+			width: double.infinity,
+			child: ElevatedButton(
+				// Panggil fungsi login
+				onPressed: _handleLogin, 
+				style: ElevatedButton.styleFrom(
+					backgroundColor: primaryColor,
+					foregroundColor: blackColor,
+					padding: const EdgeInsets.symmetric(vertical: 14),
+					shape: RoundedRectangleBorder(
+						borderRadius: BorderRadius.circular(14),
+					),
+					textStyle: GoogleFonts.poppins(fontSize: 15, fontWeight: bold),
+				),
+				child: Text(text),
+			),
+		);
+	}
 
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              "Forgot Password?",
-                              style: GoogleFonts.poppins(
-                                fontSize: responsiveFont(context, 9),
-                                color: accentColor.withOpacity(0.7),
-                              ),
-                            ),
-                          ),
+	/// Template untuk tombol login pihak ketiga (Google, Facebook).
+	Widget _socialButton({required String label, required bool dark}) {
+		return ElevatedButton(
+			onPressed: () {
+				// Todo: Implement Social Login later
+			},
+			style: ElevatedButton.styleFrom(
+				backgroundColor: dark ? accentColor : Colors.white,
+				foregroundColor: dark ? Colors.white : Colors.black87,
+				elevation: 1,
+				padding: const EdgeInsets.symmetric(vertical: 14),
+				shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+				textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: medium),
+			),
+			child: Text(label),
+		);
+	}
 
-                          const SizedBox(height: 5),
+	// =========================================================================
+	// BUILD METHOD (Layout Utama)
+	// =========================================================================
+	@override
+	Widget build(BuildContext context) {
+		return Scaffold(
+			backgroundColor: backgroundColor,
+			// AppBar transparan dengan tombol kembali
+			appBar: AppBar(
+				backgroundColor: Colors.transparent,
+				elevation: 0,
+				leading: IconButton(
+					icon: Icon(Icons.arrow_back_ios, color: accentColor),
+					onPressed: () {
+						Navigator.pop(context);
+					},
+				),
+				toolbarHeight: 50,
+			),
+			body: SafeArea(
+				child: LayoutBuilder(
+					builder: (context, constraints) {
+						// Menentukan apakah layar cukup besar (untuk optimasi layout)
+						final bool isLarge = constraints.maxHeight > 750;
 
-                          _primaryButton("Login"),
+						return Column(
+							children: [
+								// Illustration Image (fleksibel berdasarkan ukuran layar)
+								Expanded(
+									flex: isLarge ? 3 : 2,
+									child: Center(
+										child: Image.asset(
+											"assets/images/login.png",
+											width: screenWidth(context),
+											fit: BoxFit.fitWidth,
+										),
+									),
+								),
 
-                          const SizedBox(height: 10),
+								// Form Container (fleksibel untuk mengakomodasi keyboard)
+								Expanded(
+									flex: 3,
+									child: SingleChildScrollView(
+										// Mematikan scrolling jika layar besar, mengaktifkan bounce jika kecil
+										physics: isLarge
+												? const NeverScrollableScrollPhysics()
+												: const BouncingScrollPhysics(),
+										child: Padding(
+											padding: const EdgeInsets.symmetric(horizontal: 28),
+											child: Column(
+												crossAxisAlignment: CrossAxisAlignment.start,
+												children: [
+													SizedBox(height: isLarge ? 10 : 20),
 
-                          Center(
-                            child: Text(
-                              "Or login with",
-                              style: GoogleFonts.poppins(
-                                fontSize: responsiveFont(context, 9),
-                                color: accentColor.withOpacity(0.6),
-                              ),
-                            ),
-                          ),
+													// Title "Welcome back, Mate!!"
+													Text(
+														"Welcome back,\nMate!!",
+														style: GoogleFonts.poppins(
+															fontSize: isLarge ? 34 : responsiveFont(context, 30),
+															fontWeight: bold,
+															color: accentColor,
+															height: 1.2,
+														),
+													),
 
-                          const SizedBox(height: 10),
+													const SizedBox(height: 14),
 
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _socialButton(
-                                  label: "Google",
-                                  dark: false,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _socialButton(
-                                  label: "Facebook",
-                                  dark: true,
-                                ),
-                              ),
-                            ],
-                          ),
+													// INPUT EMAIL
+													_inputField(
+														hint: "Email Address",
+														isPassword: false,
+														controller: _emailController,
+													),
 
-                          const SizedBox(height: 18),
+													const SizedBox(height: 14),
 
-                          Center(
-                            child: Text.rich(
-                              TextSpan(
-                                text: "Don't have an account? ",
-                                style: GoogleFonts.poppins(
-                                  fontSize: responsiveFont(context, 13),
-                                  color: accentColor.withOpacity(0.7),
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: "Register",
-                                    style: GoogleFonts.poppins(
-                                      fontSize: responsiveFont(context, 13),
-                                      fontWeight: bold,
-                                      color: accentColor,
-                                    ),
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = () async {
-                                        // Tampilkan Loading Overlay sebelum navigasi ke Register
-                                        LoadingOverlay.show(context);
-                                        await Future.delayed(const Duration(milliseconds: 700));
+													// INPUT PASSWORD
+													_inputField(
+														hint: "Password",
+														isPassword: true,
+														controller: _passwordController,
+													),
 
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const RegisterPage(),
-                                          ),
-                                        );
-                                        
-                                        // Sembunyikan Loading Overlay setelah kembali/berpindah
-                                        LoadingOverlay.hide(context);
-                                      },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+													const SizedBox(height: 8),
 
-                          const SizedBox(height: 10),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
+													// Forgot Password Text
+													Align(
+														alignment: Alignment.centerRight,
+														child: Text(
+															"Forgot Password?",
+															style: GoogleFonts.poppins(
+																fontSize: responsiveFont(context, 9),
+																color: accentColor.withOpacity(0.7),
+															),
+														),
+													),
+
+													const SizedBox(height: 5),
+
+													// Login Button
+													_primaryButton("Login"),
+
+													const SizedBox(height: 10),
+
+													// Divider Text
+													Center(
+														child: Text(
+															"Or login with",
+															style: GoogleFonts.poppins(
+																fontSize: responsiveFont(context, 9),
+																color: accentColor.withOpacity(0.6),
+															),
+														),
+													),
+
+													const SizedBox(height: 10),
+
+													// Social Buttons (Google dan Facebook)
+													Row(
+														children: [
+															Expanded(
+																child: _socialButton(
+																	label: "Google",
+																	dark: false,
+																),
+															),
+															const SizedBox(width: 12),
+															Expanded(
+																child: _socialButton(
+																	label: "Facebook",
+																	dark: true,
+																),
+															),
+														],
+													),
+
+													const SizedBox(height: 18),
+
+													// Register Redirect Text
+													Center(
+														child: Text.rich(
+															TextSpan(
+																text: "Don't have an account? ",
+																style: GoogleFonts.poppins(
+																	fontSize: responsiveFont(context, 13),
+																	color: accentColor.withOpacity(0.7),
+																),
+																children: [
+																	TextSpan(
+																		text: "Register",
+																		style: GoogleFonts.poppins(
+																			fontSize: responsiveFont(context, 13),
+																			fontWeight: bold,
+																			color: primaryColor,
+																		),
+																		// GestureDetector untuk navigasi ke RegisterPage
+																		recognizer: TapGestureRecognizer()
+																			..onTap = () {
+																				Navigator.push(
+																					context,
+																					MaterialPageRoute(
+																						builder: (context) => const RegisterPage(),
+																					),
+																				);
+																			},
+																	),
+																],
+															),
+														),
+													),
+													SizedBox(height: isLarge ? 20 : 10), // Padding bawah
+												],
+											),
+										),
+									),
+								),
+							],
+						);
+					},
+				),
+			),
+		);
+	}
 }

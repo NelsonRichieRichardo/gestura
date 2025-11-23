@@ -3,7 +3,7 @@ import 'package:gestura/pages/login.dart';
 import 'package:gestura/pages/register.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
-import 'package:gestura/components/loading_overlay.dart'; // Import Loading Overlay
+import 'package:gestura/components/loading_overlay.dart';
 
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
@@ -89,12 +89,13 @@ class OnboardingPage extends StatelessWidget {
                     LoadingOverlay.show(context);
                     await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
 
+                    // Navigasi ke halaman Login (menggunakan push agar bisa kembali)
                     await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const LoginPage()),
                     );
 
-                    // Sembunyikan Loading setelah navigasi selesai
+                    // Sembunyikan Loading
                     LoadingOverlay.hide(context);
                   },
                   style: primaryButton.copyWith(
@@ -130,12 +131,13 @@ class OnboardingPage extends StatelessWidget {
                     LoadingOverlay.show(context);
                     await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
 
+                    // Navigasi ke halaman Register (menggunakan push agar bisa kembali)
                     await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const RegisterPage()),
                     );
 
-                    // Sembunyikan Loading setelah navigasi selesai
+                    // Sembunyikan Loading
                     LoadingOverlay.hide(context);
                   },
                   style: primaryButton.copyWith(
