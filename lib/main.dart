@@ -1,60 +1,80 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'firebase_options.dart';
 import 'core/themes/app_theme.dart';
 
-// Import halaman-halaman yang dibutuhkan
+// Halaman-halaman
 import 'pages/onboarding.dart';
 import 'pages/home.dart';
-import 'pages/login.dart'; 
+import 'pages/camera.dart'; // Import CameraPage
+
+// ===============================================
+// DEKLARASI GLOBAL CAMERA
+// Menggunakan 'late' dan inisialisasi awal ke list kosong
+// ===============================================
+late List<CameraDescription> cameras = []; 
+bool isCameraAvailable = false; // Flag untuk melacak status ketersediaan kamera
 
 void main() async {
-	WidgetsFlutterBinding.ensureInitialized();
-	await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-	runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Tunggu init firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Init camera
+  try {
+    // 1. Coba mendapatkan kamera yang tersedia
+    cameras = await availableCameras();
+    // 2. Jika berhasil, set flag ke true
+    if (cameras.isNotEmpty) {
+      isCameraAvailable = true;
+    }
+  } on CameraException catch (e) {
+    // Tangani error jika tidak ada kamera atau izin
+    print('Error accessing cameras: $e');
+    // Jika gagal, cameras tetap list kosong dan isCameraAvailable = false
+  }
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-	const MyApp({super.key});
+  const MyApp({super.key});
 
-	@override
-	Widget build(BuildContext context) {
-		return MaterialApp(
-			debugShowCheckedModeBanner: false,
-			title: 'Sign Language Translator',
-			theme: ThemeData(
-				fontFamily: 'Poppins',
-				scaffoldBackgroundColor: backgroundColor,
-			),
-			
-			// =========================================================
-			// LOGIKA PENENTUAN HALAMAN UTAMA (Sesuai Permintaan Anda)
-			// =========================================================
-			home: StreamBuilder<User?>(
-				// Mendengarkan perubahan status otentikasi
-				stream: FirebaseAuth.instance.authStateChanges(),
-				builder: (context, snapshot) {
-					// 1. Tampilkan Loading saat koneksi belum siap
-					if (snapshot.connectionState == ConnectionState.waiting) {
-						return const Scaffold(
-							body: Center(child: CircularProgressIndicator()),
-						);
-					}
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Sign Language Translator',
+      theme: ThemeData(
+        fontFamily: 'Poppins',
+        scaffoldBackgroundColor: backgroundColor,
+      ),
 
-					// 2. Jika user SUDAH LOGIN (Sesi Aktif)
-					if (snapshot.hasData && snapshot.data != null) {
-						// Langsung ke HomePage
-						// Anda harus memastikan logika pengambilan username ada sebelum Home
-						return const HomePage(username: "User"); 
-					}
+      // LOGIKA PENENTUAN HALAMAN UTAMA
+      home: StreamBuilder<User?>(
+        // Mendengarkan perubahan status otentikasi
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          // 1. Tampilkan Loading saat koneksi belum siap
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
 
-					// 3. Jika user BELUM LOGIN (snapshot.data == null)
-					// SELALU arahkan ke OnboardingPage, yang kemudian akan mengarah ke LoginPage.
-					return const OnboardingPage();
-				},
-			),
-		);
-	}
+          // 2. Jika user SUDAH LOGIN (Sesi Aktif)
+          if (snapshot.hasData && snapshot.data != null) {
+            // Langsung ke HomePage
+            return const HomePage(username: "User");
+          }
+
+          // 3. Jika user BELUM LOGIN (snapshot.data == null)
+          return const OnboardingPage();
+        },
+      ),
+    );
+  }
 }
