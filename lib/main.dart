@@ -9,20 +9,32 @@ import 'core/themes/app_theme.dart';
 // Halaman-halaman
 import 'pages/onboarding.dart';
 import 'pages/home.dart';
-import 'pages/camera.dart'; // Import CameraPage
+import 'pages/camera.dart'; 
 
 // ===============================================
 // DEKLARASI GLOBAL CAMERA
-// Menggunakan 'late' dan inisialisasi awal ke list kosong
 // ===============================================
 late List<CameraDescription> cameras = []; 
-bool isCameraAvailable = false; // Flag untuk melacak status ketersediaan kamera
+bool isCameraAvailable = false; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Tunggu init firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // =========================================================
+  // ✅ SOLUSI UNTUK MENGHAPUS SESI SAAT APLIKASI DI-RESTART
+  // Ini akan memaksa semua pengguna untuk melalui Onboarding/Login
+  // setiap kali aplikasi dimulai ulang.
+  // =========================================================
+  try {
+    await FirebaseAuth.instance.signOut();
+    print("Sesi Firebase berhasil dihapus saat aplikasi dimulai ulang.");
+  } catch (e) {
+    print("Gagal menghapus sesi: $e");
+  }
+  // =========================================================
 
   // Init camera
   try {
@@ -35,8 +47,8 @@ void main() async {
   } on CameraException catch (e) {
     // Tangani error jika tidak ada kamera atau izin
     print('Error accessing cameras: $e');
-    // Jika gagal, cameras tetap list kosong dan isCameraAvailable = false
   }
+  
   runApp(const MyApp());
 }
 
@@ -55,7 +67,7 @@ class MyApp extends StatelessWidget {
 
       // LOGIKA PENENTUAN HALAMAN UTAMA
       home: StreamBuilder<User?>(
-        // Mendengarkan perubahan status otentikasi
+        // Karena kita memanggil signOut() di main, stream ini akan segera mengembalikan null.
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
           // 1. Tampilkan Loading saat koneksi belum siap
@@ -65,13 +77,13 @@ class MyApp extends StatelessWidget {
             );
           }
 
-          // 2. Jika user SUDAH LOGIN (Sesi Aktif)
+          // 2. Karena signOut() dipanggil di main, ini akan menjadi null.
           if (snapshot.hasData && snapshot.data != null) {
-            // Langsung ke HomePage
+            // Jika Anda ingin menguji login, hapus baris signOut() di main.
             return const HomePage(username: "User");
           }
 
-          // 3. Jika user BELUM LOGIN (snapshot.data == null)
+          // 3. Jika user BELUM LOGIN (snapshot.data == null) -> Pindah ke Onboarding
           return const OnboardingPage();
         },
       ),
