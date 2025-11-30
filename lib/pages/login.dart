@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:gestura/pages/onboarding.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
@@ -229,7 +230,12 @@ class _LoginPageState extends State<LoginPage> {
 				leading: IconButton(
 					icon: Icon(Icons.arrow_back_ios, color: accentColor),
 					onPressed: () {
-						Navigator.pop(context);
+						Navigator.pushReplacement(
+				context,
+				MaterialPageRoute(
+					builder: (context) => OnboardingPage(),
+				),
+			);
 					},
 				),
 				toolbarHeight: 50,

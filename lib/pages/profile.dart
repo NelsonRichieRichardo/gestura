@@ -97,17 +97,17 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             
-            // Contoh tombol logout
-            SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                icon: Icon(Icons.logout, color: dangerColor),
-                label: Text('Logout', style: bodyText.copyWith(color: dangerColor)),
-                onPressed: () {
-                  // Logika Logout di sini
-                },
-              ),
-            ),
+            // // Contoh tombol logout
+            // SizedBox(
+            //   width: double.infinity,
+            //   child: TextButton.icon(
+            //     icon: Icon(Icons.logout, color: dangerColor),
+            //     label: Text('Logout', style: bodyText.copyWith(color: dangerColor)),
+            //     onPressed: () {
+            //       // Logika Logout di sini
+            //     },
+            //   ),
+            // ),
           ],
         ),
       ),
