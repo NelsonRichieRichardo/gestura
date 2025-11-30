@@ -5,6 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// Tambahkan imports untuk Social Login
+import 'package:google_sign_in/google_sign_in.dart'; // Untuk Google Login
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart'; // Untuk Facebook Login
 
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:gestura/pages/register.dart';
@@ -181,7 +184,7 @@ class _LoginPageState extends State<LoginPage> {
       if (e.code == 'invalid-email') {
         message = 'Format email tidak valid.';
       } else if (e.code == 'user-not-found' || e.code == 'missing-email') {
-         message = 'Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'; // Pesan umum untuk keamanan
+          message = 'Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'; // Pesan umum untuk keamanan
       } else {
         message = 'Terjadi kesalahan: ${e.message}';
       }
@@ -196,6 +199,31 @@ class _LoginPageState extends State<LoginPage> {
         SnackBar(content: Text('Terjadi kesalahan tak terduga: $e'), backgroundColor: dangerColor),
       );
     }
+  }
+
+  // --- FUNGSI BANTU UNTUK NAVIGASI SETELAH LOGIN BERHASIL ---
+
+  Future<void> _navigateToHome(String uid) async {
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+
+    String username = "Mate";
+
+    if (userDoc.exists && userDoc.data() != null) {
+      final data = userDoc.data() as Map<String, dynamic>;
+      username = data['username'] ?? "Mate";
+    }
+
+    if (!mounted) return;
+
+    LoadingOverlay.hide(context);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => HomePage(username: username)),
+    );
   }
 
   // --- LOGIKA LOGIN EMAIL/PASSWORD ---
@@ -223,25 +251,9 @@ class _LoginPageState extends State<LoginPage> {
 
       String uid = userCredential.user!.uid;
 
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      // Pindah ke fungsi helper
+      await _navigateToHome(uid);
 
-      String username = "Mate";
-
-      if (userDoc.exists) {
-        username = userDoc.get('username') ?? "Mate";
-      }
-
-      if (!mounted) return;
-
-      LoadingOverlay.hide(context);
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => HomePage(username: username)),
-      );
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         LoadingOverlay.hide(context);
@@ -271,6 +283,117 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       }
+    }
+  }
+
+  // --- LOGIKA LOGIN GOOGLE ---
+
+  Future<void> _handleGoogleLogin() async {
+    LoadingOverlay.show(context);
+    try {
+      // 1. Pemicu alur autentikasi.
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+
+      if (googleUser == null) {
+        // Pengguna membatalkan proses sign in
+        if (!mounted) return;
+        LoadingOverlay.hide(context);
+        return;
+      }
+
+      // 2. Minta kredensial.
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // 3. Masuk ke Firebase dengan kredensial.
+      final UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // Lanjutkan ke navigasi
+      await _navigateToHome(userCredential.user!.uid);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      LoadingOverlay.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Google Login Failed: ${e.message}"),
+          backgroundColor: dangerColor,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      LoadingOverlay.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("An unexpected error occurred: $e"),
+          backgroundColor: dangerColor,
+        ),
+      );
+    }
+  }
+
+  // --- LOGIKA LOGIN FACEBOOK ---
+
+  Future<void> _handleFacebookLogin() async {
+    LoadingOverlay.show(context);
+    try {
+      // 1. Pemicu alur login Facebook.
+      final LoginResult result = await FacebookAuth.instance.login(); 
+
+      if (result.status == LoginStatus.success) {
+        // 2. Dapatkan Access Token.
+        final AccessToken accessToken = result.accessToken!;
+
+        // 3. Buat kredensial Firebase dari token Facebook.
+        final AuthCredential credential =
+            FacebookAuthProvider.credential(accessToken.token);
+
+        // 4. Masuk ke Firebase dengan kredensial.
+        final UserCredential userCredential =
+            await FirebaseAuth.instance.signInWithCredential(credential);
+
+        // Lanjutkan ke navigasi
+        await _navigateToHome(userCredential.user!.uid);
+      } else if (result.status == LoginStatus.cancelled) {
+        if (!mounted) return;
+        LoadingOverlay.hide(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Facebook login dibatalkan.'),
+            backgroundColor: dangerColor,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        LoadingOverlay.hide(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Facebook login gagal: ${result.message}'),
+            backgroundColor: dangerColor,
+          ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      LoadingOverlay.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Facebook Login Failed: ${e.message}"),
+          backgroundColor: dangerColor,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      LoadingOverlay.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("An unexpected error occurred: $e"),
+          backgroundColor: dangerColor,
+        ),
+      );
     }
   }
 
@@ -331,13 +454,14 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // Widget _socialButton diubah agar tidak lagi memerlukan parameter onPressed
+  // Widget _socialButton diubah agar menerima parameter onPressed
   Widget _socialButton({
     required String label,
     required bool dark,
+    required VoidCallback onPressed, // Tambahkan parameter onPressed
   }) {
     return ElevatedButton(
-      onPressed: null, // Tombol dinonaktifkan
+      onPressed: onPressed, // Gunakan onPressed yang baru
       style: ElevatedButton.styleFrom(
         backgroundColor: dark ? accentColor : backgroundColor,
         foregroundColor: dark ? backgroundColor : blackColor,
@@ -501,6 +625,7 @@ class _LoginPageState extends State<LoginPage> {
                                 child: _socialButton(
                                   label: "Google",
                                   dark: false,
+                                  onPressed: _handleGoogleLogin, // Panggil fungsi Google Login
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -508,6 +633,7 @@ class _LoginPageState extends State<LoginPage> {
                                 child: _socialButton(
                                   label: "Facebook",
                                   dark: true,
+                                  onPressed: _handleFacebookLogin, // Panggil fungsi Facebook Login
                                 ),
                               ),
                             ],

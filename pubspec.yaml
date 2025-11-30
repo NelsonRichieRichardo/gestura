@@ -10,6 +10,8 @@ dependencies:
   cloud_firestore: ^6.1.0
   firebase_auth: ^6.1.2
   firebase_core: ^4.2.1
+  google_sign_in: ^6.2.1
+  flutter_facebook_auth: ^6.0.4
   flutter:
     sdk: flutter
   flutter_feather_icons: ^2.0.0+1
