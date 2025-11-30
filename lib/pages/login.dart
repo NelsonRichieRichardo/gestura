@@ -4,12 +4,13 @@ import 'package:gestura/pages/onboarding.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Import ini untuk Save Password
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:gestura/pages/register.dart';
 import 'package:gestura/pages/home.dart';
 import 'package:gestura/components/loading_overlay.dart';
+
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -22,26 +23,29 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
-  
+
   // State untuk Save Password
   bool _rememberMe = false;
+
+  // Controller khusus untuk input email di dialog Forgot Password
+  final TextEditingController _resetEmailController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _loadUserCredentials(); // Cek apakah ada password yang tersimpan saat aplikasi dibuka
+    _loadUserCredentials();
   }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _resetEmailController.dispose(); // Jangan lupa dispose controller baru
     super.dispose();
   }
 
   // --- LOGIKA SAVE PASSWORD ---
-  
-  // 1. Memuat data dari penyimpanan lokal
+
   void _loadUserCredentials() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -59,7 +63,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // 2. Menyimpan data ke penyimpanan lokal
   Future<void> _saveUserCredentials() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (_rememberMe) {
@@ -67,14 +70,135 @@ class _LoginPageState extends State<LoginPage> {
       await prefs.setString('password', _passwordController.text);
       await prefs.setBool('remember_me', true);
     } else {
-      // Jika checkbox dimatikan, hapus data
       await prefs.remove('email');
       await prefs.remove('password');
       await prefs.setBool('remember_me', false);
     }
   }
 
-  // --- LOGIKA LOGIN ---
+  // --- LOGIKA FORGOT PASSWORD ---
+
+  Future<void> _handleForgotPassword() async {
+    // 1. Tampilkan Dialog untuk Input Email
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        // Jika email di kolom login terisi, gunakan sebagai nilai awal
+        if (_emailController.text.isNotEmpty) {
+          _resetEmailController.text = _emailController.text.trim();
+        }
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Text(
+            'Reset Kata Sandi',
+            style: GoogleFonts.poppins(fontWeight: bold, color: accentColor),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Masukkan alamat email Anda yang terdaftar untuk menerima tautan reset kata sandi.',
+                style: GoogleFonts.poppins(fontSize: 14),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: _resetEmailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  hintText: "Email Anda",
+                  hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  filled: true,
+                  fillColor: secondaryBackground,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _resetEmailController.clear();
+              },
+              child: Text(
+                'Batal',
+                style: GoogleFonts.poppins(color: accentColor.withOpacity(0.7)),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Tutup dialog
+                _sendPasswordResetEmail(_resetEmailController.text.trim());
+              },
+              child: Text(
+                'Kirim Link',
+                style: GoogleFonts.poppins(color: primaryColor, fontWeight: bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 2. Fungsi untuk Mengirim Email Reset
+  Future<void> _sendPasswordResetEmail(String email) async {
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email tidak boleh kosong.')),
+      );
+      return;
+    }
+
+    LoadingOverlay.show(context);
+    
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
+      if (!mounted) return;
+      LoadingOverlay.hide(context);
+      
+      // Tampilkan notifikasi sukses (praktik terbaik keamanan)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'),
+          backgroundColor: successColor, // Menggunakan successColor dari app_theme
+        ),
+      );
+      _resetEmailController.clear();
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      LoadingOverlay.hide(context);
+      
+      String message = "Gagal mengirim tautan reset.";
+      // Menggunakan pesan generik untuk 'user-not-found' untuk keamanan
+      if (e.code == 'invalid-email') {
+        message = 'Format email tidak valid.';
+      } else if (e.code == 'user-not-found' || e.code == 'missing-email') {
+         message = 'Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'; // Pesan umum untuk keamanan
+      } else {
+        message = 'Terjadi kesalahan: ${e.message}';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: dangerColor), // Menggunakan dangerColor
+      );
+    } catch (e) {
+      if (!mounted) return;
+      LoadingOverlay.hide(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Terjadi kesalahan tak terduga: $e'), backgroundColor: dangerColor),
+      );
+    }
+  }
+
+  // --- LOGIKA LOGIN EMAIL/PASSWORD ---
 
   Future<void> _handleLogin() async {
     if (_emailController.text.trim().isEmpty ||
@@ -90,21 +214,21 @@ class _LoginPageState extends State<LoginPage> {
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
 
       // Simpan Password jika login berhasil dan checkbox dicentang
       await _saveUserCredentials();
 
       String uid = userCredential.user!.uid;
-      
+
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .get();
 
-      String username = "Mate"; 
+      String username = "Mate";
 
       if (userDoc.exists) {
         username = userDoc.get('username') ?? "Mate";
@@ -116,16 +240,13 @@ class _LoginPageState extends State<LoginPage> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => HomePage(username: username),
-        ),
+        MaterialPageRoute(builder: (context) => HomePage(username: username)),
       );
-
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         LoadingOverlay.hide(context);
         String message = "Login failed";
-        
+
         if (e.code == 'user-not-found') {
           message = 'No user found for that email.';
         } else if (e.code == 'wrong-password') {
@@ -137,10 +258,7 @@ class _LoginPageState extends State<LoginPage> {
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(message), backgroundColor: dangerColor),
         );
       }
     } catch (e) {
@@ -149,7 +267,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Error: ${e.toString()}"),
-            backgroundColor: Colors.red,
+            backgroundColor: dangerColor,
           ),
         );
       }
@@ -198,7 +316,7 @@ class _LoginPageState extends State<LoginPage> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: _handleLogin, 
+        onPressed: _handleLogin,
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
           foregroundColor: blackColor,
@@ -213,16 +331,21 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _socialButton({required String label, required bool dark}) {
+  // Widget _socialButton diubah agar tidak lagi memerlukan parameter onPressed
+  Widget _socialButton({
+    required String label,
+    required bool dark,
+  }) {
     return ElevatedButton(
-      onPressed: () {},
+      onPressed: null, // Tombol dinonaktifkan
       style: ElevatedButton.styleFrom(
-        backgroundColor: dark ? accentColor : Colors.white,
-        foregroundColor: dark ? Colors.white : Colors.black87,
+        backgroundColor: dark ? accentColor : backgroundColor,
+        foregroundColor: dark ? backgroundColor : blackColor,
         elevation: 1,
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: medium),
+        side: dark ? null : BorderSide(color: greyColor.withOpacity(0.5), width: 1), // Border untuk tombol putih
       ),
       child: Text(label),
     );
@@ -251,11 +374,11 @@ class _LoginPageState extends State<LoginPage> {
             return Column(
               children: [
                 Expanded(
-                  flex: 3, 
+                  flex: 3,
                   child: Align(
-                    alignment: Alignment.bottomCenter, 
+                    alignment: Alignment.bottomCenter,
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 10.0), 
+                      padding: const EdgeInsets.only(bottom: 10.0),
                       child: Image.asset(
                         "assets/images/login.png",
                         width: screenWidth(context),
@@ -264,7 +387,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-
                 Expanded(
                   flex: 6,
                   child: SingleChildScrollView(
@@ -279,7 +401,9 @@ class _LoginPageState extends State<LoginPage> {
                           Text(
                             "Welcome back,\nMate!!",
                             style: GoogleFonts.poppins(
-                              fontSize: isLarge ? 40 : responsiveFont(context, 36),
+                              fontSize: isLarge
+                                  ? 40
+                                  : responsiveFont(context, 36),
                               fontWeight: bold,
                               color: accentColor,
                               height: 1.2,
@@ -297,7 +421,7 @@ class _LoginPageState extends State<LoginPage> {
                             isPassword: true,
                             controller: _passwordController,
                           ),
-                          
+
                           // --- BARIS SAVE PASSWORD & FORGOT PASSWORD ---
                           const SizedBox(height: 8),
                           Row(
@@ -312,7 +436,9 @@ class _LoginPageState extends State<LoginPage> {
                                     child: Checkbox(
                                       value: _rememberMe,
                                       activeColor: primaryColor,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
                                       onChanged: (value) {
                                         setState(() {
                                           _rememberMe = value!;
@@ -324,39 +450,46 @@ class _LoginPageState extends State<LoginPage> {
                                   Text(
                                     "Save Password",
                                     style: GoogleFonts.poppins(
-                                      fontSize: responsiveFont(context, 13), // Ukuran Font Save Password
+                                      fontSize: responsiveFont(
+                                        context,
+                                        13,
+                                      ), // Ukuran Font Save Password
                                       color: accentColor.withOpacity(0.7),
                                     ),
                                   ),
                                 ],
                               ),
-                              
-                              // Forgot Password (Kanan)
+
+                              // Forgot Password (Kanan) -> Tautan yang dimodifikasi
                               GestureDetector(
-                                onTap: () {
-                                  // Logika Forgot Password di sini
-                                },
+                                onTap: _handleForgotPassword, // Panggil fungsi reset password
                                 child: Text(
                                   "Forgot Password?",
                                   style: GoogleFonts.poppins(
-                                    fontSize: responsiveFont(context, 13), // EDIT: Font dibesarkan (11 -> 13)
-                                    color: accentColor.withOpacity(0.7),
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: responsiveFont(
+                                      context,
+                                      13,
+                                    ), 
+                                    color: primaryColor, // Ubah warna agar lebih menonjol
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          
+
                           const SizedBox(height: 15),
                           _primaryButton("Login"),
                           const SizedBox(height: 15),
-                          
+
                           Center(
                             child: Text(
                               "Or login with",
                               style: GoogleFonts.poppins(
-                                fontSize: responsiveFont(context, 13), // EDIT: Font dibesarkan (11 -> 13)
+                                fontSize: responsiveFont(
+                                  context,
+                                  13,
+                                ),
                                 color: accentColor.withOpacity(0.6),
                               ),
                             ),
@@ -385,14 +518,20 @@ class _LoginPageState extends State<LoginPage> {
                               TextSpan(
                                 text: "Don't have an account? ",
                                 style: GoogleFonts.poppins(
-                                  fontSize: responsiveFont(context, 15), // EDIT: Font dibesarkan (13 -> 15)
+                                  fontSize: responsiveFont(
+                                    context,
+                                    15,
+                                  ),
                                   color: accentColor.withOpacity(0.7),
                                 ),
                                 children: [
                                   TextSpan(
                                     text: "Register",
                                     style: GoogleFonts.poppins(
-                                      fontSize: responsiveFont(context, 15), // EDIT: Font dibesarkan (13 -> 15)
+                                      fontSize: responsiveFont(
+                                        context,
+                                        15,
+                                      ),
                                       fontWeight: bold,
                                       color: primaryColor,
                                     ),
@@ -401,7 +540,8 @@ class _LoginPageState extends State<LoginPage> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => const RegisterPage(),
+                                            builder: (context) =>
+                                                const RegisterPage(),
                                           ),
                                         );
                                       },
