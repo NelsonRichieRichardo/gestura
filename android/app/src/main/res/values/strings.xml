@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Gestura</string> 
+    
+    <string name="facebook_app_id">1384646173371354</string>
+
+    <string name="facebook_client_token">716038d4d5a01206530e6b370e9ea28b</string>
+
+    <string name="fb_login_protocol_scheme">fb1384646173371354</string>
+</resources>
