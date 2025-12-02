@@ -45,3 +45,12 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Implementasi standard library Kotlin
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.8.22") 
+    
+    // Facebook SDK for Android
+    // 'latest.release' akan mengambil versi stabil terbaru yang kompatibel.
+    implementation("com.facebook.android:facebook-login:latest.release") 
+}

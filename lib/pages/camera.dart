@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:camera/camera.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
 
 // Import variabel global yang dideklarasikan di main.dart
 import '../main.dart'; 
