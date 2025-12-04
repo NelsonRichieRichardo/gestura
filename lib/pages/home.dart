@@ -11,6 +11,116 @@ import 'package:gestura/pages/profile.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// --- DATA MODEL UNTUK HISTORY (GLOBAL) ---
+enum HistoryType { translation, learning, quiz }
+
+class HistoryItem {
+  final String title;
+  final String subtitle;
+  final String time;
+  final IconData icon;
+  final Color color;
+  final HistoryType type;
+  final String? detailPayload; 
+
+  HistoryItem({
+    required this.title,
+    required this.subtitle,
+    required this.time,
+    required this.icon,
+    required this.color,
+    required this.type,
+    this.detailPayload,
+  });
+}
+
+// Data Dummy History
+final List<HistoryItem> dummyHistory = [
+  HistoryItem(
+    title: "Translated 'HELLO'",
+    subtitle: "Camera Mode",
+    time: "Just now",
+    icon: Icons.translate_rounded,
+    color: Colors.green,
+    type: HistoryType.translation,
+    detailPayload: "HELLO"
+  ),
+  HistoryItem(
+    title: "Learned Alphabet A-E",
+    subtitle: "Dictionary",
+    time: "2 hours ago",
+    icon: Icons.school_rounded,
+    color: Colors.purple,
+    type: HistoryType.learning,
+    detailPayload: "A, B, C, D, E"
+  ),
+  HistoryItem(
+    title: "Daily Quiz",
+    subtitle: "Score: 80/100",
+    time: "Yesterday",
+    icon: Icons.emoji_events_rounded,
+    color: Colors.amber,
+    type: HistoryType.quiz,
+    detailPayload: "80"
+  ),
+  HistoryItem(
+    title: "Translated 'THANKS'",
+    subtitle: "Camera Mode",
+    time: "Yesterday",
+    icon: Icons.translate_rounded,
+    color: Colors.green,
+    type: HistoryType.translation,
+    detailPayload: "THANKS"
+  ),
+  HistoryItem(
+    title: "Learned Greetings",
+    subtitle: "Dictionary",
+    time: "2 days ago",
+    icon: Icons.school_rounded,
+    color: Colors.purple,
+    type: HistoryType.learning,
+    detailPayload: "Greetings: Thank you, Welcome"
+  ),
+];
+
+// --- WIDGET HELPER GLOBAL: History List Tile ---
+// Digunakan di HomeContent dan HistoryPage
+Widget buildHistoryTile({required HistoryItem item, required VoidCallback onTap}) {
+    return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 2))]
+            ),
+            child: Row(
+                children: [
+                    Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: item.color.withOpacity(0.1), shape: BoxShape.circle),
+                        child: Icon(item.icon, color: item.color, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                                Text(item.title, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black)),
+                                Text("${item.time} • ${item.subtitle}", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey)),
+                            ],
+                        ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, color: Colors.grey.shade300)
+                ],
+            ),
+        ),
+    );
+}
+
+
 class HomePage extends StatefulWidget {
     final String username;
 
@@ -67,23 +177,20 @@ class _HomePageState extends State<HomePage> {
 
     void _showWelcomeNotification(BuildContext context, String username) {
         if (!mounted) return;
-        
         ScaffoldMessenger.of(context).clearSnackBars();
-
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(
-                    "Selamat datang, $username!",
-                    style: GoogleFonts.poppins(color: Colors.white, fontWeight: bold),
+                content: Row(
+                    children: [
+                        Icon(Icons.check_circle, color: Colors.white, size: 20),
+                        SizedBox(width: 10),
+                        Text("Welcome back, $username!", style: GoogleFonts.poppins(color: Colors.white)),
+                    ],
                 ),
-                backgroundColor: primaryColor,
-                duration: const Duration(seconds: 3),
+                backgroundColor: blackColor,
                 behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                margin: EdgeInsets.symmetric(
-                    horizontal: responsiveWidth(context, 0.05),
-                    vertical: 10,
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                margin: EdgeInsets.all(20),
             ),
         );
     }
@@ -118,14 +225,10 @@ class _HomePageState extends State<HomePage> {
     
     void _onItemTapped(int index) {
         if (index == 2) return; 
-
         setState(() {
             _selectedIndex = index;
         });
-        
-        if (index == 0) {
-            _fetchUsername();
-        }
+        if (index == 0) _fetchUsername();
     }
     
     void _navigateToCamera() {
@@ -136,7 +239,7 @@ class _HomePageState extends State<HomePage> {
 
     @override
     Widget build(BuildContext context) {
-        final List<Widget> _pages = [
+        final List<Widget> pages = [
             HomeContent(
                 username: _currentUsername, 
                 onNavigate: _onItemTapped,
@@ -151,57 +254,55 @@ class _HomePageState extends State<HomePage> {
         ];
 
         return Scaffold( 
-            backgroundColor: backgroundColor,
-            appBar: null,
+            backgroundColor: const Color(0xFFF8F9FD), 
             body: SafeArea( 
+                bottom: false,
                 child: IndexedStack(
                     index: _selectedIndex,
-                    children: _pages,
+                    children: pages,
                 ),
             ),
-            bottomNavigationBar: _buildBottomNavBar(context),
+            bottomNavigationBar: _buildPremiumBottomNavBar(context),
             floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-            floatingActionButton: FloatingActionButton(
-                onPressed: _navigateToCamera,
-                backgroundColor: primaryColor,
-                // Icon Floating Action Button juga dibesarkan sedikit
-                child: Icon(Icons.camera_alt, color: blackColor, size: responsiveFont(context, 32)), 
-                shape: const CircleBorder(),
-                elevation: 4,
+            floatingActionButton: Container(
+                margin: const EdgeInsets.only(top: 10),
+                height: 70, width: 70,
+                child: FloatingActionButton(
+                    onPressed: _navigateToCamera,
+                    backgroundColor: primaryColor, 
+                    elevation: 8,
+                    shape: const CircleBorder(),
+                    child: Icon(Icons.camera_alt_rounded, color: Colors.white, size: 32),
+                ),
             ),
         );
     }
 
-    Widget _buildBottomNavBar(BuildContext context) {
+    Widget _buildPremiumBottomNavBar(BuildContext context) {
         return Container(
-            height: responsiveHeight(context, 0.10), 
+            height: 85,
             decoration: BoxDecoration(
-                color: blackColor, 
+                color: Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
                 boxShadow: [
-                    BoxShadow(
-                        color: blackColor.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, -5),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, -5)),
                 ],
             ),
             child: BottomAppBar(
-                color: blackColor,
+                color: Colors.transparent,
                 elevation: 0,
-                notchMargin: 8.0, 
+                notchMargin: 12.0, 
                 shape: const CircularNotchedRectangle(),
-                child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: <Widget>[
-                            _buildNavItem(Icons.home_rounded, 0),
-                            _buildNavItem(Icons.menu_book_rounded, 1),
-                            SizedBox(width: responsiveWidth(context, 0.10)), 
-                            _buildNavItem(Icons.fitness_center_rounded, 3), 
-                            _buildNavItem(Icons.settings_rounded, 4), 
-                        ],
-                    ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                        _buildNavItem(Icons.grid_view_rounded, 0),
+                        _buildNavItem(Icons.book_rounded, 1),
+                        const SizedBox(width: 40), 
+                        _buildNavItem(Icons.bar_chart_rounded, 3), 
+                        _buildNavItem(Icons.settings_rounded, 4), 
+                    ],
                 ),
             ),
         );
@@ -209,15 +310,17 @@ class _HomePageState extends State<HomePage> {
 
     Widget _buildNavItem(IconData icon, int index) {
         final isSelected = _selectedIndex == index;
-        final color = isSelected ? primaryColor : greyColor;
-        
-        // UPDATE: Icon dibesarkan jadi 30 (sebelumnya 26)
-        return IconButton(
-            icon: Icon(icon, size: responsiveFont(context, 30)),
-            color: color,
-            onPressed: () => _onItemTapped(index),
-            splashColor: primaryColor.withOpacity(0.2),
-            highlightColor: Colors.transparent,
+        return InkWell(
+            onTap: () => _onItemTapped(index),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+                padding: const EdgeInsets.all(12),
+                child: Icon(
+                    icon, 
+                    size: 28, 
+                    color: isSelected ? blackColor : Colors.grey.shade400
+                ),
+            ),
         );
     }
 }
@@ -238,383 +341,463 @@ class HomeContent extends StatelessWidget {
         required this.onNavigateProfile,
     });
 
+    // --- FUNGSI NAVIGASI KE HALAMAN SEE ALL ---
+    void _navigateToHistoryPage(BuildContext context) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const HistoryPage()),
+      );
+    }
+
+    // --- FUNGSI MENAMPILKAN MODAL DETAIL ---
+    void _showDetailModal(BuildContext context, HistoryItem item) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _buildDetailModalContent(context, item),
+      );
+    }
+
+    // --- MODAL CONTENT BUILDER ---
+    Widget _buildDetailModalContent(BuildContext context, HistoryItem item) {
+        String mainText = "";
+        String subText = "";
+        String btnText = "";
+        VoidCallback btnAction = () => Navigator.pop(context);
+
+        // LOGIKA KONTEN MODAL BERDASARKAN TIPE
+        if (item.type == HistoryType.translation) {
+            mainText = "Translation Complete";
+            subText = "You have done translated \"${item.detailPayload}\"";
+            btnText = "Done";
+        } else if (item.type == HistoryType.learning) {
+            mainText = "Alphabet Learned";
+            subText = "Good job! You learned \"${item.detailPayload}\"";
+            btnText = "Continue Learning";
+            btnAction = () {
+                Navigator.pop(context);
+                onNavigate(1); // Pindah ke Dictionary
+            };
+        } else if (item.type == HistoryType.quiz) {
+            mainText = "Quiz Result";
+            subText = "You scored ${item.detailPayload} in Daily Quiz";
+            btnText = "Retake Quiz";
+            btnAction = () {
+                Navigator.pop(context);
+                onNavigate(3); // Pindah ke Exercise/Quiz
+            };
+        }
+
+        return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                    Container(
+                        width: 50, height: 5,
+                        decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
+                    ),
+                    const SizedBox(height: 30),
+                    Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: item.color.withOpacity(0.1), shape: BoxShape.circle),
+                        child: Icon(item.icon, color: item.color, size: 40),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(mainText, style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
+                    const SizedBox(height: 10),
+                    Text(subText, textAlign: TextAlign.center, style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey)),
+                    const SizedBox(height: 30),
+                    SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                            onPressed: btnAction,
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: item.color,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 0
+                            ),
+                            child: Text(btnText, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+                        ),
+                    ),
+                    const SizedBox(height: 10),
+                ],
+            ),
+        );
+    }
+    
     @override
     Widget build(BuildContext context) {
-        final usernameFirstWord = username.split(' ')[0];
         final sw = screenWidth(context);
-        final sh = screenHeight(context);
 
         return SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: sw * 0.06),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                    SizedBox(height: sh * 0.02),
+                    const SizedBox(height: 20),
                     
-                    // --- HEADER (Nama App & Profil) ---
+                    // --- HEADER ---
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                            Text(
-                                "Gestura", 
-                                style: GoogleFonts.poppins(
-                                    fontSize: responsiveFont(context, 16),
-                                    fontWeight: bold,
-                                    color: accentColor.withOpacity(0.5),
-                                ),
-                            ),
-                            PopupMenuButton<String>(
-                                child: Container(
-                                    padding: EdgeInsets.all(responsiveFont(context, 8)),
-                                    decoration: BoxDecoration(
-                                        color: secondaryBackground,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: greyColor.withOpacity(0.3)),
-                                    ),
-                                    child: Icon(Icons.person, color: accentColor, size: responsiveFont(context, 22)),
-                                ),
-                                offset: Offset(0, responsiveHeight(context, 0.05)), 
-                                color: secondaryBackground, 
-                                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                                    PopupMenuItem<String> (
-                                        value: 'profile',
-                                        child: Row(
-                                            children: [
-                                                Icon(Icons.account_circle, color: accentColor, size: responsiveFont(context, 18)),
-                                                SizedBox(width: 8),
-                                                Text('Profile', style: smallText.copyWith(color: accentColor)),
-                                            ],
-                                        ),
-                                    ),
-                                    const PopupMenuDivider(),
-                                    PopupMenuItem<String> (
-                                        value: 'logout',
-                                        child: Row(
-                                            children: [
-                                                Icon(Icons.logout, color: dangerColor, size: responsiveFont(context, 18)),
-                                                SizedBox(width: 8),
-                                                Text('Logout', style: smallText.copyWith(color: dangerColor)),
-                                            ],
-                                        ),
+                            Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                    Text("Hello, Mate!", style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade500)),
+                                    Text(
+                                        username.length > 15 ? "${username.substring(0, 15)}..." : username, 
+                                        style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black)
                                     ),
                                 ],
-                                onSelected: (String result) {
-                                    if (result == 'profile') {
-                                        onNavigateProfile();
-                                    } else if (result == 'logout') {
-                                        onLogout(); 
-                                    }
-                                },
+                            ),
+                            InkWell(
+                                onTap: onNavigateProfile,
+                                borderRadius: BorderRadius.circular(50),
+                                child: Container(
+                                    height: 50, width: 50,
+                                    decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.grey.shade200, width: 2),
+                                    ),
+                                    child: const Icon(Icons.person, color: Colors.grey),
+                                ),
                             ),
                         ],
                     ),
-                    SizedBox(height: sh * 0.02),
+                    const SizedBox(height: 30),
 
-                    Text(
-                        "Hello, $usernameFirstWord!", 
-                        style: GoogleFonts.poppins(
-                            fontSize: responsiveFont(context, 28),
-                            fontWeight: bold,
-                            color: accentColor,
+                    // --- HERO CARD ---
+                    Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                            color: blackColor,
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                                BoxShadow(color: blackColor.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))
+                            ]
+                        ),
+                        child: Row(
+                            children: [
+                                Expanded(
+                                    flex: 6,
+                                    child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                            Text(
+                                                "Start Learning\nSign Language",
+                                                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, height: 1.2),
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Text(
+                                                "Use camera to translate gestures instantly.",
+                                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade400),
+                                            ),
+                                            const SizedBox(height: 20),
+                                            InkWell(
+                                                onTap: onNavigateCamera,
+                                                child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                                    decoration: BoxDecoration(
+                                                        color: primaryColor,
+                                                        borderRadius: BorderRadius.circular(12)
+                                                    ),
+                                                    child: Text("Try Now", style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                ),
+                                Expanded(
+                                    flex: 4,
+                                    child: Image.asset("assets/images/hi.png", fit: BoxFit.contain, errorBuilder: (c,e,s)=>SizedBox()), 
+                                )
+                            ],
                         ),
                     ),
-                    SizedBox(height: sh * 0.03),
-
-                    // --- MAIN CARD (Updated Design) ---
-                    _buildMainCard(
-                        context,
-                        title: "Ready to try?",
-                        subtitle: "Turn on camera & start signing!",
-                        assetPath: "assets/images/hi.png",
-                        onTap: onNavigateCamera, 
-                    ),
                     
-                    SizedBox(height: sh * 0.03),
+                    const SizedBox(height: 30),
 
-                    // --- GRID CARDS (Updated Design) ---
+                    // --- MAIN MENU GRID ---
+                    Row(
+                        children: [
+                            Expanded(
+                                child: _buildMenuCard(
+                                    title: "Dictionary",
+                                    icon: Icons.menu_book_rounded,
+                                    color: Colors.blueAccent,
+                                    onTap: () => onNavigate(1),
+                                ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                                child: _buildMenuCard(
+                                    title: "Practice",
+                                    icon: Icons.gamepad_rounded,
+                                    color: Colors.orangeAccent,
+                                    onTap: () => onNavigate(3),
+                                ),
+                            ),
+                        ],
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // --- RECENT HISTORY ---
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                            _buildGridCard(
-                                context,
-                                title: "Let's Learn",
-                                subtitle: "Basic Signs",
-                                assetPath: "assets/images/wink.png",
-                                bgColor: primaryColor,
-                                onTap: () => onNavigate(1), // Dictionary
-                            ),
-
-                            _buildGridCard(
-                                context,
-                                title: "Practice",
-                                subtitle: "Daily Quiz",
-                                assetPath: "assets/images/question bubble.png",
-                                bgColor: blackColor,
-                                onTap: () => onNavigate(3), // Exercise
+                            Text("Recent History", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                            // TOMBOL SEE ALL YANG BISA DIKLIK
+                            InkWell(
+                                onTap: () => _navigateToHistoryPage(context),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                    padding: const EdgeInsets.all(4.0),
+                                    child: Text("See All", style: GoogleFonts.poppins(fontSize: 14, color: primaryColor, fontWeight: FontWeight.w600)),
+                                ),
                             ),
                         ],
                     ),
+                    const SizedBox(height: 16),
+
+                    // LIST HISTORY (3 ITEM PERTAMA)
+                    Column(
+                        children: dummyHistory.take(3).map((item) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: buildHistoryTile(
+                                item: item,
+                                onTap: () => _showDetailModal(context, item),
+                            ),
+                          );
+                        }).toList(),
+                    ),
                     
-                    SizedBox(height: sh * 0.04), 
-
-                    // --- NEW FEATURE: GAMIFICATION STATS (Ala Duolingo) ---
-                    _buildGamificationStats(context),
-
-                    SizedBox(height: sh * 0.15), 
+                    const SizedBox(height: 100), 
                 ],
             ),
         );
     }
+
+    // HELPER: Menu Card
+    Widget _buildMenuCard({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
+        return InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]
+                ),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                        Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                            child: Icon(icon, color: color, size: 24),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(title, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black)),
+                        Text("Start learning", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey)),
+                    ],
+                ),
+            ),
+        );
+    }
+}
+
+
+// --- HALAMAN BARU: SEE ALL HISTORY (FUNGSIONAL) ---
+class HistoryPage extends StatefulWidget {
+  const HistoryPage({super.key});
+
+  @override
+  State<HistoryPage> createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<HistoryPage> {
+  final List<String> _filters = ['All', 'Translation', 'Learning', 'Quiz'];
+  String _selectedFilter = 'All';
+
+  // LOGIKA FILTERING HISTORY
+  List<HistoryItem> get _filteredHistory {
+    if (_selectedFilter == 'All') {
+      return dummyHistory;
+    }
+    return dummyHistory.where((item) {
+      if (_selectedFilter == 'Translation') return item.type == HistoryType.translation;
+      if (_selectedFilter == 'Learning') return item.type == HistoryType.learning;
+      if (_selectedFilter == 'Quiz') return item.type == HistoryType.quiz;
+      return false;
+    }).toList();
+  }
+
+  // FUNGSI UNTUK MENAMPILKAN MODAL DETAIL (sama seperti di HomeContent)
+  void _showDetailModal(BuildContext context, HistoryItem item) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _buildDetailModalContent(context, item),
+      );
+    }
     
-    // UPDATE: Main Card menggunakan Stack agar gambar lebih bebas posisinya
-    Widget _buildMainCard(BuildContext context, {required String title, required String subtitle, required String assetPath, required VoidCallback onTap}) {
-        final sw = screenWidth(context);
-        
-        return InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(24),
-            child: Container(
-                width: sw,
-                height: responsiveHeight(context, 0.20), // Tinggi sedikit dikurangi biar compact
-                decoration: BoxDecoration(
-                    color: secondaryBackground, 
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                        BoxShadow(color: shadowColor.withOpacity(0.08), blurRadius: 15, offset: const Offset(0, 5)),
-                    ],
-                ),
-                child: Stack(
-                    children: [
-                        // Teks di Kiri
-                        Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                    Text(
-                                        title,
-                                        style: GoogleFonts.poppins(
-                                            fontSize: responsiveFont(context, 22),
-                                            fontWeight: bold,
-                                            color: accentColor,
-                                        ),
-                                    ),
-                                    SizedBox(height: 4),
-                                    SizedBox(
-                                        width: sw * 0.5,
-                                        child: Text(
-                                            subtitle,
-                                            style: GoogleFonts.poppins(
-                                                fontSize: responsiveFont(context, 12),
-                                                color: accentColor.withOpacity(0.6),
-                                            ),
-                                        ),
-                                    ),
-                                    SizedBox(height: 12),
-                                    Container(
-                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        decoration: BoxDecoration(
-                                            color: primaryColor.withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                            "Start Now ->",
-                                            style: TextStyle(fontSize: 10, fontWeight: bold, color: Colors.orange[900]),
-                                        ),
-                                    )
-                                ],
-                            ),
-                        ),
+    Widget _buildDetailModalContent(BuildContext context, HistoryItem item) {
+        String mainText = "";
+        String subText = "";
+        String btnText = "";
+        VoidCallback btnAction = () => Navigator.pop(context);
 
-                        // Gambar di Kanan (Positioned agar tidak terpotong)
-                        Positioned(
-                            right: -10,
-                            bottom: -10,
-                            child: Image.asset(
-                                assetPath,
-                                height: responsiveHeight(context, 0.18), // Ukuran gambar proporsional
-                                fit: BoxFit.contain,
+        // LOGIKA KONTEN MODAL BERDASARKAN TIPE
+        if (item.type == HistoryType.translation) {
+            mainText = "Translation Complete";
+            subText = "You have done translated \"${item.detailPayload}\"";
+            btnText = "Done";
+        } else if (item.type == HistoryType.learning) {
+            mainText = "Alphabet Learned";
+            subText = "Good job! You learned \"${item.detailPayload}\"";
+            btnText = "Continue Learning";
+            btnAction = () {
+                // Karena di halaman terpisah, kita pop, lalu kirim sinyal untuk ganti tab
+                Navigator.pop(context); 
+            };
+        } else if (item.type == HistoryType.quiz) {
+            mainText = "Quiz Result";
+            subText = "You scored ${item.detailPayload} in Daily Quiz";
+            btnText = "Retake Quiz";
+            btnAction = () {
+                Navigator.pop(context);
+            };
+        }
+
+        return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                    Container(
+                        width: 50, height: 5,
+                        decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
+                    ),
+                    const SizedBox(height: 30),
+                    Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: item.color.withOpacity(0.1), shape: BoxShape.circle),
+                        child: Icon(item.icon, color: item.color, size: 40),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(mainText, style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
+                    const SizedBox(height: 10),
+                    Text(subText, textAlign: TextAlign.center, style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey)),
+                    const SizedBox(height: 30),
+                    SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                            onPressed: btnAction,
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: item.color,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 0
                             ),
+                            child: Text(btnText, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
                         ),
-                    ],
-                ),
+                    ),
+                    const SizedBox(height: 10),
+                ],
             ),
         );
     }
-
-    // UPDATE: Grid Card diperbaiki agar gambar tidak gepeng
-    Widget _buildGridCard(BuildContext context, {required String title, required String subtitle, required String assetPath, required Color bgColor, required VoidCallback onTap}) {
-        final sw = screenWidth(context);
-        final cardWidth = (sw * 0.94 - (sw * 0.06 * 2) - 10) / 2; 
-
-        return InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(24),
-            child: Container(
-                width: cardWidth,
-                height: responsiveHeight(context, 0.26), 
-                decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                         BoxShadow(color: bgColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5)),
-                    ]
-                ),
-                child: Stack(
-                    children: [
-                        // Teks di Atas
-                        Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                    Text(
-                                        title,
-                                        style: GoogleFonts.poppins(
-                                            fontSize: responsiveFont(context, 18),
-                                            fontWeight: bold,
-                                            color: bgColor == blackColor ? backgroundColor : accentColor,
-                                        ),
-                                    ),
-                                    Text(
-                                        subtitle,
-                                        style: GoogleFonts.poppins(
-                                            fontSize: responsiveFont(context, 12),
-                                            fontWeight: medium,
-                                            color: bgColor == blackColor ? backgroundColor.withOpacity(0.7) : accentColor.withOpacity(0.7),
-                                        ),
-                                    ),
-                                ],
-                            ),
-                        ),
-
-                        // Gambar di Bawah Kanan
-                        Positioned(
-                            right: -15,
-                            bottom: -15,
-                            child: Image.asset(
-                                assetPath,
-                                width: cardWidth * 0.8, // Lebar gambar 80% dari kartu
-                                fit: BoxFit.contain,
-                            ),
-                        ),
-                    ],
-                ),
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FD),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text("Activity History", style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.bold)),
+      ),
+      body: Column(
+        children: [
+          // Filter Chips (Sudah Fungsional)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Row(
+              children: _filters.map((filter) {
+                return _buildFilterChip(filter, filter == _selectedFilter);
+              }).toList(),
             ),
-        );
-    }
+          ),
+          
+          // List View yang sudah di filter
+          Expanded(
+            child: _filteredHistory.isEmpty 
+            ? Center(child: Text("No history found for $_selectedFilter", style: TextStyle(color: Colors.grey)))
+            : ListView.builder(
+              padding: const EdgeInsets.all(20),
+              itemCount: _filteredHistory.length,
+              itemBuilder: (context, index) {
+                final item = _filteredHistory[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: buildHistoryTile(
+                    item: item,
+                    onTap: () => _showDetailModal(context, item),
+                  ),
+                );
+              },
+            ),
+          )
+        ],
+      ),
+    );
+  }
 
-    // BARU: Widget Gamifikasi ala Duolingo
-    Widget _buildGamificationStats(BuildContext context) {
-        return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-                Text(
-                    "Your Progress",
-                    style: GoogleFonts.poppins(fontSize: 18, fontWeight: bold, color: accentColor),
-                ),
-                SizedBox(height: 12),
-                
-                // Kartu Daily Streak
-                Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: greyColor.withOpacity(0.1)),
-                        boxShadow: [BoxShadow(color: shadowColor.withOpacity(0.05), blurRadius: 10)],
-                    ),
-                    child: Column(
-                        children: [
-                            Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                    Row(
-                                        children: [
-                                            Icon(Icons.local_fire_department_rounded, color: Colors.orange, size: 24),
-                                            SizedBox(width: 8),
-                                            Text("2 Day Streak", style: TextStyle(fontWeight: bold, fontSize: 16)),
-                                        ],
-                                    ),
-                                    Text("Goal: 7 days", style: TextStyle(color: greyColor, fontSize: 12)),
-                                ],
-                            ),
-                            SizedBox(height: 16),
-                            // Baris Hari
-                            Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: ["M", "T", "W", "T", "F", "S", "S"].asMap().entries.map((entry) {
-                                    int idx = entry.key;
-                                    String day = entry.value;
-                                    bool isActive = idx < 2; // Contoh: Senin & Selasa aktif
-                                    bool isToday = idx == 1; // Contoh: Selasa adalah hari ini
-
-                                    return Column(
-                                        children: [
-                                            Text(day, style: TextStyle(fontSize: 12, color: isActive ? accentColor : greyColor)),
-                                            SizedBox(height: 6),
-                                            Container(
-                                                width: 30, height: 30,
-                                                decoration: BoxDecoration(
-                                                    color: isActive ? (isToday ? primaryColor : primaryColor.withOpacity(0.3)) : secondaryBackground,
-                                                    shape: BoxShape.circle,
-                                                    border: isToday ? Border.all(color: Colors.orange, width: 2) : null,
-                                                ),
-                                                child: isActive 
-                                                    ? Icon(Icons.check, size: 16, color: isToday ? blackColor : accentColor) 
-                                                    : null,
-                                            )
-                                        ],
-                                    );
-                                }).toList(),
-                            )
-                        ],
-                    ),
-                ),
-                
-                SizedBox(height: 12),
-                
-                // Kartu XP / Target Harian
-                Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                        color: blackColor,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: blackColor.withOpacity(0.2), blurRadius: 10, offset: Offset(0,4))],
-                    ),
-                    child: Row(
-                        children: [
-                            Container(
-                                padding: EdgeInsets.all(10),
-                                decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
-                                child: Icon(Icons.show_chart_rounded, color: primaryColor),
-                            ),
-                            SizedBox(width: 16),
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                        Text("Daily Goal", style: TextStyle(color: Colors.white, fontWeight: bold)),
-                                        SizedBox(height: 4),
-                                        ClipRRect(
-                                            borderRadius: BorderRadius.circular(4),
-                                            child: LinearProgressIndicator(
-                                                value: 0.7, // 70%
-                                                backgroundColor: Colors.white.withOpacity(0.2),
-                                                color: primaryColor,
-                                                minHeight: 6,
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                            ),
-                            SizedBox(width: 16),
-                            Text("35/50 XP", style: TextStyle(color: primaryColor, fontWeight: bold)),
-                        ],
-                    ),
-                )
-            ],
-        );
-    }
+  Widget _buildFilterChip(String label, bool isActive) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedFilter = label;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.black : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isActive ? Colors.black : Colors.grey.shade200),
+        ),
+        child: Text(
+          label, 
+          style: GoogleFonts.poppins(
+            color: isActive ? Colors.white : Colors.grey, 
+            fontWeight: FontWeight.w500
+          )
+        ),
+      ),
+    );
+  }
 }

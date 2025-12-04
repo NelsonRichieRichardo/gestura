@@ -99,12 +99,12 @@ class OnboardingPage extends StatelessWidget {
                     LoadingOverlay.hide(context);
                   },
                   style: primaryButton.copyWith(
-                    backgroundColor: MaterialStateProperty.all(primaryColor),
-                    foregroundColor: MaterialStateProperty.all(blackColor),
-                    minimumSize: MaterialStateProperty.all(
+                    backgroundColor: WidgetStateProperty.all(primaryColor),
+                    foregroundColor: WidgetStateProperty.all(blackColor),
+                    minimumSize: WidgetStateProperty.all(
                       Size(double.infinity, sh * 0.06),
                     ),
-                    shape: MaterialStateProperty.all(
+                    shape: WidgetStateProperty.all(
                       RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -141,12 +141,12 @@ class OnboardingPage extends StatelessWidget {
                     LoadingOverlay.hide(context);
                   },
                   style: primaryButton.copyWith(
-                    backgroundColor: MaterialStateProperty.all(primaryColor),
-                    foregroundColor: MaterialStateProperty.all(blackColor),
-                    minimumSize: MaterialStateProperty.all(
+                    backgroundColor: WidgetStateProperty.all(primaryColor),
+                    foregroundColor: WidgetStateProperty.all(blackColor),
+                    minimumSize: WidgetStateProperty.all(
                       Size(double.infinity, sh * 0.06),
                     ),
-                    shape: MaterialStateProperty.all(
+                    shape: WidgetStateProperty.all(
                       RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),

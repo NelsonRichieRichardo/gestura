@@ -14,7 +14,7 @@ import 'pages/camera.dart';
 // ===============================================
 // DEKLARASI GLOBAL CAMERA
 // ===============================================
-late List<CameraDescription> cameras = []; 
+List<CameraDescription> cameras = []; 
 bool isCameraAvailable = false; 
 
 void main() async {
