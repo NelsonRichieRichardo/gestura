@@ -1,16 +1,13 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle, WriteBuffer;
+import 'package:gestura/core/themes/app_theme.dart';
+import 'package:camera/camera.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart'; 
+import 'package:google_mlkit_commons/google_mlkit_commons.dart' as ml_kit_commons; 
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Untuk rootBundle
-import 'package:gestura/core/themes/app_theme.dart';
-import 'package:tflite_flutter/tflite_flutter.dart'; // <<< Perubahan: Menggunakan tflite_flutter
-import 'package:camera/camera.dart';
-
 import '../main.dart'; 
-
-// Asumsi import dan variabel yang tidak didefinisikan di file ini tetap ada
-// import 'package:gestura/core/themes/app_theme.dart';
-// ...
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -20,30 +17,35 @@ class CameraPage extends StatefulWidget {
 }
 
 class _CameraPageState extends State<CameraPage> {
+  // --- TFLITE_FLUTTER & POSE DETECTOR STATE ---
+  Interpreter? _interpreter;
+  List<String> _labels = [];
+  bool _isModelLoaded = false;
+  late final PoseDetector _poseDetector;
+
+  // Model Keypoint Properties 
+  final int SEQUENCE_LENGTH = 30;
+  final int KEYPOINT_VECTOR_SIZE = 63; 
+
+  // Buffer untuk menyimpan urutan keypoint (30 frame)
+  List<List<double>> _sequenceBuffer = [];
+  // ----------------------------------------------------------------------
+
   // --- KAMERA & TFLITE ---
   CameraController? _cameraController; 
   Future<void>? _initializeControllerFuture; 
   int selectedCameraIndex = 0; 
   bool _isInitialized = false; 
   bool _hasInitializationError = false; 
-
-  // TFLITE FLUTTER SPECIFIC
-  Interpreter? _interpreter; // Interpreter untuk TFLite Flutter
-  List<String> _labels = []; // Untuk menyimpan label
-  bool _isModelLoaded = false; 
   bool _isDetecting = false; 
 
-  // Dimensi input model
-  int _inputSize = 224; // Asumsi input model 224x224
-  int _outputLength = 0; // Jumlah output (kelas)
-
   // --- LOGIC DETEKSI & TRANSLATE ---
-  String _outputLabel = ""; 
+  String _outputLabel = "Tunggu Deteksi..."; 
   String _confidence = "";
   
   // State untuk Mode Tampilan (Kamera vs GIF)
   bool _showGifView = false; 
-  String _translatedText = ""; // Menyimpan teks yang sedang diterjemahkan
+  String _translatedText = ""; 
 
   // --- INPUT TEXT ---
   final TextEditingController _textController = TextEditingController();
@@ -53,8 +55,16 @@ class _CameraPageState extends State<CameraPage> {
   @override
   void initState() {
     super.initState();
+    
+    // Inisialisasi ML Kit Pose Detector
+    final options = PoseDetectorOptions(
+      model: PoseDetectionModel.accurate,
+      mode: PoseDetectionMode.stream,
+    );
+    _poseDetector = PoseDetector(options: options);
+
     _loadTfliteModel();
-    if (isCameraAvailable) {
+    if (isCameraAvailable && cameras.isNotEmpty) {
       final initialIndex = cameras.indexWhere((camera) => camera.lensDirection == CameraLensDirection.front);
       selectedCameraIndex = initialIndex != -1 ? initialIndex : 0; 
       _initializeController();
@@ -66,25 +76,19 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
-  // --- PERUBAHAN: IMPLEMENTASI TFLITE_FLUTTER ---
-
+  // --- 1. MEMUAT MODEL (Menggunakan Interpreter dari tflite_flutter) ---
   Future<void> _loadTfliteModel() async {
     try {
-      // 1. Muat Model
-      _interpreter = await Interpreter.fromAsset("assets/models/sign_languange_model.tflite");
+      _interpreter = await Interpreter.fromAsset("assets/models/sign_language_model.tflite");
       
-      // 2. Muat Label
       final labelData = await rootBundle.loadString("assets/models/labels.txt");
-      _labels = labelData.split('\n').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-      _outputLength = _labels.length;
+      _labels = labelData
+          .split('\n')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
 
-      // 3. Cek Dimensi Input Model (asumsi [1, 224, 224, 3])
-      final inputShape = _interpreter!.getInputTensor(0).shape;
-      if (inputShape.length >= 3) {
-         _inputSize = inputShape[1]; // Ambil ukuran W/H
-      }
-
-      if (mounted) { 
+      if (mounted) {
         setState(() {
           _isModelLoaded = true;
           if (_isInitialized) {
@@ -97,68 +101,86 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  // Fungsi utilitas untuk konversi format YUV (CameraImage) ke ByteBuffer (Input TFLite)
-  // Ini adalah proses yang kompleks dan penting untuk tflite_flutter
-  Uint8List _imageToByteList(CameraImage image) {
-    // Inisialisasi buffer output
-    final int width = image.width;
-    final int height = image.height;
-    final int targetSize = _inputSize;
-    
-    // Asumsi input model adalah FLOAT32 (224, 224, 3) yang dinormalisasi [0, 1] atau [-1, 1]
-    // Untuk kesederhanaan, kita akan mengasumsikan model dinormalisasi [-1, 1] (seperti di kode lama)
-    // float value = (normalized_pixel_value - 127.5) / 127.5; -> value / 127.5 - 1.0;
-    // float value = pixel_value / 127.5 - 1.0;
+  // --- 2. ML KIT UTILITIES: Ekstraksi Keypoint ---
+  List<double> _extractKeypoints(List<Pose> poses) {
+    if (poses.isNotEmpty) {
+      final pose = poses.first;
+      List<double> keypoints = [];
 
-    final floatBuffer = Float32List(1 * targetSize * targetSize * 3);
-    final buffer = Float32List.view(floatBuffer.buffer);
-    int pixelIndex = 0;
-
-    // Untuk TFLite, kita hanya perlu bagian Y (Luminance) dari YUV_420_888
-    // Namun model image classification membutuhkan 3 channel RGB,
-    // jadi kita harus mengkonversi YUV ke RGB dan me-resize
-    // Implementasi lengkap YUV -> RGB -> Resize manual sangat rumit. 
-    // Untuk kode ini, kita akan menggunakan cara paling dasar: mengambil pixel RGB pertama
-    // dari YUV dan berasumsi bahwa implementasi TFLite yang lebih canggih (ImageProcessor)
-    // akan digunakan di produksi, namun karena kita tidak bisa menambah package, 
-    // kita akan menggunakan representasi buffer yang dibutuhkan TFLite Flutter
-    
-    // CATATAN: Implementasi di bawah ini *tidak* melakukan konversi YUV ke RGB yang benar
-    // atau resize, dan hanya berfungsi sebagai placeholder struktur buffer TFLite Flutter.
-    // Dalam aplikasi nyata, Anda HARUS menggunakan package seperti 'image' atau 'image_picker' 
-    // dan melakukan konversi YUV-RGB-Resize-Normalisasi yang tepat.
-    
-    // Placeholder untuk mengisi buffer
-    // Anggap kita hanya mengisi buffer dengan data float 0.0, yang pasti akan menghasilkan 
-    // deteksi yang salah, tetapi menjaga struktur kode yang dibutuhkan tflite_flutter.
-    for (int y = 0; y < targetSize; y++) {
-      for (int x = 0; x < targetSize; x++) {
-        buffer[pixelIndex++] = 0.0; // R
-        buffer[pixelIndex++] = 0.0; // G
-        buffer[pixelIndex++] = 0.0; // B
+      for (final landmarkType in pose.landmarks.keys) {
+        final landmark = pose.landmarks[landmarkType]!;
+        keypoints.add(landmark.x);
+        keypoints.add(landmark.y);
+        keypoints.add(landmark.z);
       }
-    }
 
-    return floatBuffer.buffer.asUint8List();
+      if (keypoints.length >= KEYPOINT_VECTOR_SIZE) {
+        return keypoints.sublist(0, KEYPOINT_VECTOR_SIZE);
+      } else {
+        keypoints.addAll(
+          List.filled(KEYPOINT_VECTOR_SIZE - keypoints.length, 0.0),
+        );
+        return keypoints;
+      }
+    } else {
+      return List.filled(KEYPOINT_VECTOR_SIZE, 0.0);
+    }
   }
 
+  // --- 3. ML KIT UTILITIES: Konversi CameraImage ke InputImage (Fix Breaking Change) ---
+  ml_kit_commons.InputImage? _inputImageFromCameraImage(CameraImage image) {
+    if (image.format.group != ImageFormatGroup.yuv420) {
+      return null;
+    }
+
+    final allBytes = WriteBuffer();
+    for (final plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
+    }
+    final bytes = allBytes.done().buffer.asUint8List();
+
+    final Size imageSize = Size(
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+
+    final camera = cameras[selectedCameraIndex];
+
+    final rotationInDegrees = {
+      CameraLensDirection.front: 270,
+      CameraLensDirection.back: 90,
+    }[camera.lensDirection] ?? 0;
+
+    final imageRotation =
+        ml_kit_commons.InputImageRotationValue.fromRawValue(rotationInDegrees) ??
+            ml_kit_commons.InputImageRotation.rotation0deg;
+
+    final inputImageFormat = ml_kit_commons.InputImageFormat.nv21;
+    
+    final inputImageMetadata = ml_kit_commons.InputImageMetadata(
+      size: imageSize,
+      rotation: imageRotation, 
+      format: inputImageFormat, 
+      bytesPerRow: image.planes[0].bytesPerRow, 
+    );
+
+    return ml_kit_commons.InputImage.fromBytes(
+      bytes: bytes, 
+      metadata: inputImageMetadata,
+    );
+  }
+  // --- AKHIR ML KIT UTILITIES ---
 
   void _initializeController() {
     if (!isCameraAvailable || cameras.isEmpty) return;
-    
-    // Hentikan stream dan dispose controller lama sebelum yang baru
     if (_cameraController != null) {
-      if (_cameraController!.value.isStreamingImages) {
-        _cameraController!.stopImageStream();
-      }
       _cameraController!.dispose();
     }
-
     setState(() { _hasInitializationError = false; _isInitialized = false; });
     
     _cameraController = CameraController(
       cameras[selectedCameraIndex], 
-      ResolutionPreset.low, // Menggunakan resolusi rendah untuk performa (disarankan untuk tflite)
+      ResolutionPreset.medium, 
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420, 
     );
@@ -166,8 +188,8 @@ class _CameraPageState extends State<CameraPage> {
     _initializeControllerFuture = _cameraController!.initialize().then((_) {
       if (mounted) {
         setState(() => _isInitialized = true);
-        if (_isModelLoaded) { 
-          _startImageStream();
+        if (_isModelLoaded) {
+           _startImageStream();
         }
       }
     }).catchError((error) {
@@ -175,98 +197,232 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
+  // --------------------------------------------------------------------------------------------------
+  // --- 4. LOGIC INFERENSI ---
+  // --------------------------------------------------------------------------------------------------
   void _startImageStream() {
-    if (!_cameraController!.value.isInitialized || _cameraController!.value.isStreamingImages || !_isModelLoaded) return; 
+    if (_cameraController == null || !_isModelLoaded || !_cameraController!.value.isInitialized) return;
 
-    _cameraController!.startImageStream((CameraImage image) async { // Tambah 'async' di sini
-      if (!_isDetecting && !_isUserTyping && !_showGifView && _isModelLoaded) {
+    if (_cameraController!.value.isStreamingImages) {
+      _cameraController!.stopImageStream();
+    }
+
+    _cameraController!.startImageStream((CameraImage img) async {
+      if (_interpreter == null) {
+        _isDetecting = false;
+        return;
+      }
+
+      if (!_isDetecting && !_isUserTyping && !_showGifView) {
         _isDetecting = true;
         
-        // 1. Preprocessing Gambar (Menggunakan Placeholder)
-        // Kita perlu mengkonversi CameraImage ke format input model (biasanya Float32List)
-        final inputBytes = _imageToByteList(image);
-        
-        // 2. Siapkan Input dan Output Buffer
-        // Input shape: [1, _inputSize, _inputSize, 3] (Float32)
-        // Output shape: [1, _outputLength] (Float32, untuk confidence)
-        final input = inputBytes.buffer.asFloat32List().reshape([1, _inputSize, _inputSize, 3]);
-        final output = Float32List(1 * _outputLength).reshape([1, _outputLength]);
-
         try {
-          // 3. Jalankan Inferensi
-          _interpreter!.run(input, output);
-          
-          if (mounted) {
-            // 4. Proses Hasil Output
-            double maxConfidence = -1;
-            int maxIndex = -1;
-            
-            // Output adalah [1, outputLength]
-            for (int i = 0; i < _outputLength; i++) {
-              if (output[0][i] > maxConfidence) {
-                maxConfidence = output[0][i];
-                maxIndex = i;
-              }
+          final inputImage = _inputImageFromCameraImage(img);
+
+          if (inputImage != null) {
+            final poses = await _poseDetector.processImage(inputImage);
+
+            final keypoints = _extractKeypoints(poses);
+            _sequenceBuffer.add(keypoints);
+
+            // Jaga ukuran buffer
+            if (_sequenceBuffer.length > SEQUENCE_LENGTH) {
+              _sequenceBuffer = _sequenceBuffer.sublist(
+                _sequenceBuffer.length - SEQUENCE_LENGTH,
+              );
             }
-            
-            if (maxConfidence > 0.5 && maxIndex != -1) { // Threshold 0.5
-              setState(() {
-                _outputLabel = _labels[maxIndex];
-                _confidence = (maxConfidence * 100).toStringAsFixed(0) + "%";
-              });
-            } else {
-               setState(() {
-                 _outputLabel = "";
-                 _confidence = "";
-               });
+
+            // Jalankan inferensi hanya ketika buffer penuh
+            if (_sequenceBuffer.length == SEQUENCE_LENGTH) {
+              
+              // >>> INPUT (2D List untuk [1, 30, 63, 1]) <<<
+              final input = _sequenceBuffer.map((frame) => frame.cast<double>()).toList();
+
+              // >>> OUTPUT (2D List untuk [1, 28]) <<<
+              final output = [
+                List.filled(_labels.length, 0.0),
+              ]; 
+
+              // Pastikan output direset untuk setiap inferensi
+              _interpreter!.run([input], output); 
+
+              final result = output[0] as List<double>;
+              double maxConfidence = 0.0;
+              int maxIndex = -1;
+
+              for (int i = 0; i < result.length; i++) {
+                if (result[i] > maxConfidence) {
+                  maxConfidence = result[i];
+                  maxIndex = i;
+                }
+              }
+
+              const THRESHOLD = 0.7;
+
+              if (mounted) {
+                setState(() {
+                  if (maxConfidence > THRESHOLD &&
+                      maxIndex != -1 &&
+                      maxIndex < _labels.length) {
+                    
+                    String detectedChar = _labels[maxIndex];
+                    _outputLabel = detectedChar;
+                    _confidence = (maxConfidence * 100).toStringAsFixed(0) + "%";
+
+                    // === START PERUBAHAN BARU: Tambahkan ke Kotak Input ===
+                    String currentText = _textController.text;
+                    String lastChar = currentText.isNotEmpty ? currentText.substring(currentText.length - 1) : "";
+
+                    // Tambahkan hanya jika karakter yang dideteksi berbeda dari karakter terakhir
+                    if (detectedChar != lastChar) {
+                        // Tambahkan karakter baru ke kotak input
+                        _textController.text = currentText + detectedChar;
+                        
+                        // Pindahkan kursor ke akhir
+                        _textController.selection = TextSelection.fromPosition(
+                            TextPosition(offset: _textController.text.length)
+                        );
+
+                        // KOSONGKAN BUFFER agar inferensi berikutnya menunggu 30 frame baru
+                        _sequenceBuffer.clear();
+                    }
+                    // === AKHIR PERUBAHAN BARU ===
+                    
+                  } else {
+                    _outputLabel = "Tunggu Deteksi...";
+                    _confidence = "";
+                  }
+                });
+              }
             }
           }
         } catch (e) {
-          print("Error running TFLite inference: $e");
+          print("Error during ML/TFLite processing: $e");
+          // Tangani exception, tapi biarkan loop berlanjut
+        } finally {
+          _isDetecting = false;
         }
-        
-        _isDetecting = false; 
       }
     });
   }
+  // --- AKHIR LOGIC INFERENSI ---
+  // --------------------------------------------------------------------------------------------------
 
-  // ... (Fungsi _translateTextToSign, _closeTranslateView, _buildGifResultView, _buildCameraView, _toggleCamera tidak berubah secara logika inti) ...
-
+  // --- LOGIC: Translate Text -> Sign (Di Layar Utama) ---
   void _translateTextToSign() {
     String text = _textController.text.trim().toLowerCase();
     if (text.isEmpty) return;
 
-    _inputFocusNode.unfocus(); 
+    _inputFocusNode.unfocus(); // Tutup keyboard
+    _cameraController?.stopImageStream(); // Stop stream saat mode GIF aktif
     
     setState(() {
-      _translatedText = text; 
-      _showGifView = true;    
-      _outputLabel = "";      
+      _translatedText = text; // Simpan teks untuk ditampilkan
+      _showGifView = true;     // UBAH MODE TAMPILAN KE GIF
+      _outputLabel = "";       // Reset label kamera
+      _confidence = "";
     });
   }
 
+  // Fungsi untuk kembali ke mode kamera
   void _closeTranslateView() {
     setState(() {
       _showGifView = false;
       _textController.clear();
       _translatedText = "";
-      if (_isInitialized && _isModelLoaded) {
-        _startImageStream();
-      }
+      _sequenceBuffer.clear(); // Bersihkan buffer sequence saat kembali ke kamera
     });
+    _startImageStream(); // Mulai stream lagi
   }
 
-  // Tambahkan kembali implementasi _buildGifResultView dan _buildCameraView 
-  // agar kode tetap lengkap (Saya asumsikan Anda memiliki definisi untuk style variables)
+  // Widget Tampilan GIF (Pengganti Kamera)
   Widget _buildGifResultView() {
-    // ... (Placeholder untuk menjaga kelengkapan)
-    return Container(child: Center(child: Text("GIF View for $_translatedText")));
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            "Terjemahan: ${_translatedText.toUpperCase()}",
+            style: bodyText.copyWith(fontWeight: bold, color: accentColor),
+          ),
+          const SizedBox(height: 20),
+          
+          // List GIF Horizontal
+          SizedBox(
+            height: 200, // Tinggi area gambar
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              // Pusatkan item jika sedikit
+              physics: const BouncingScrollPhysics(),
+              itemCount: _translatedText.length,
+              itemBuilder: (context, index) {
+                String char = _translatedText[index];
+                
+                if (RegExp(r'[a-z]').hasMatch(char)) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5.0),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 140, height: 140,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: greyColor.withOpacity(0.2)),
+                            borderRadius: BorderRadius.circular(12),
+                            color: secondaryBackground,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              "assets/bisindo/$char.gif", // Panggil GIF
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                // Tampilan jika gambar ERROR/TIDAK KETEMU
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.broken_image, color: greyColor, size: 30),
+                                      Text(char.toUpperCase(), style: heading1.copyWith(color: greyColor)),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(char.toUpperCase(), style: smallText.copyWith(fontWeight: bold)),
+                      ],
+                    ),
+                  );
+                } else if (char == ' ') {
+                  return const SizedBox(width: 40);
+                }
+                return const SizedBox();
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "Geser untuk melihat huruf selanjutnya 👉",
+            style: smallText.copyWith(fontSize: 10, color: greyColor),
+          )
+        ],
+      ),
+    );
   }
 
   Widget _buildCameraView() {
-    // ... (Placeholder untuk menjaga kelengkapan)
-     if (!isCameraAvailable) {
-       return Center(child: Text("Kamera tidak tersedia di Emulator\n(Gunakan HP Fisik)", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
+    if (!isCameraAvailable) {
+        // Pesan error jika di Emulator
+        return Center(child: Text("Kamera tidak tersedia di Emulator\n(Gunakan HP Fisik)", textAlign: TextAlign.center, style: bodyText.copyWith(color: greyColor)));
     }
     return FutureBuilder<void>(
       future: _initializeControllerFuture,
@@ -287,39 +443,18 @@ class _CameraPageState extends State<CameraPage> {
               ),
             );
         } else if (_hasInitializationError) {
-          return const Center(child: Text("Gagal memuat kamera"));
+          return Center(child: Text("Gagal memuat kamera", style: bodyText));
         }
-        return Center(child: CircularProgressIndicator(color: accentColor));
+        return Center(child: CircularProgressIndicator(color: primaryColor));
       },
     );
-  }
-  
-  Future<void> _toggleCamera() async {
-    if (_cameraController != null) {
-      if (_cameraController!.value.isStreamingImages) {
-        await _cameraController!.stopImageStream();
-      }
-      await _cameraController!.dispose();
-    }
-    setState(() {
-      selectedCameraIndex = (selectedCameraIndex + 1) % cameras.length;
-      _isInitialized = false;
-      _outputLabel = ""; 
-      _confidence = "";
-    });
-    _initializeController(); 
   }
 
   @override
   void dispose() {
-    if (_cameraController != null) {
-      if (_cameraController!.value.isStreamingImages) {
-        _cameraController!.stopImageStream();
-      }
-      _cameraController!.dispose();
-    }
-    
-    _interpreter?.close(); // <<< Perubahan: Tutup interpreter TFLite Flutter
+    _cameraController?.dispose();
+    _interpreter?.close();
+    _poseDetector.close();
     _textController.dispose();
     _inputFocusNode.dispose();
     super.dispose();
@@ -327,7 +462,6 @@ class _CameraPageState extends State<CameraPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Asumsi style variables (screenWidth, accentColor, dll.) terdefinisi
     final sw = screenWidth(context);
 
     return Scaffold(
@@ -339,7 +473,6 @@ class _CameraPageState extends State<CameraPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ... (UI elements like Gestura text and spacing) ...
               SizedBox(height: responsiveHeight(context, 0.02)),
               Text("Gestura", style: smallText.copyWith(color: accentColor.withOpacity(0.6), fontWeight: medium)),
               SizedBox(height: responsiveHeight(context, 0.03)),
@@ -349,59 +482,78 @@ class _CameraPageState extends State<CameraPage> {
                 flex: 3,
                 child: Container(
                   width: sw,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0,4))]
+                  decoration: cardDecoration.copyWith(
+                    color: secondaryBackground,
+                    boxShadow: cardDecoration.boxShadow,
                   ),
                   child: Stack(
                     children: [
+                      // LOGIKA TAMPILAN:
                       Positioned.fill(
                         child: _showGifView 
                             ? _buildGifResultView() 
                             : _buildCameraView(),
                       ),
 
+                      // Tombol Toggle Kamera (Hanya muncul di mode Kamera)
                       if (!_showGifView && isCameraAvailable && _isInitialized && cameras.length > 1) 
                         Positioned(
                           top: 10, right: 10,
                           child: InkWell(
-                            onTap: _toggleCamera,
+                            onTap: () async {
+                              if (_cameraController != null) {
+                                await _cameraController!.stopImageStream();
+                                await _cameraController!.dispose();
+                              }
+                              setState(() {
+                                selectedCameraIndex = (selectedCameraIndex + 1) % cameras.length;
+                                _isInitialized = false;
+                              });
+                              _initializeController(); 
+                            },
                             child: CircleAvatar(
-                              backgroundColor: Colors.black54,
-                              child: Icon(Icons.flip_camera_ios_rounded, color: Colors.white, size: 20),
+                              backgroundColor: blackColor.withOpacity(0.5),
+                              child: Icon(Icons.flip_camera_ios_rounded, color: backgroundColor, size: 20),
                             ),
                           ),
                         ),
                       
+                      // Tombol CLOSE (X) - Muncul HANYA saat Mode GIF Translate Aktif
                       if (_showGifView)
                         Positioned(
                           top: 10, right: 10,
                           child: InkWell(
-                            onTap: _closeTranslateView,
+                            onTap: _closeTranslateView, // Kembali ke kamera
                             child: CircleAvatar(
-                              backgroundColor: Colors.red.withOpacity(0.9),
-                              child: Icon(Icons.close, color: Colors.white, size: 24),
+                              backgroundColor: dangerColor.withOpacity(0.9),
+                              child: Icon(Icons.close, color: backgroundColor, size: 24),
                             ),
                           ),
                         ),
 
+                      // Label Hasil Deteksi Realtime (Hanya di Mode Kamera)
                       if (!_showGifView && !_isUserTyping && _outputLabel.isNotEmpty)
-                         Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 20),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(30),
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 20),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: accentColor.withOpacity(0.85),
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: Text(
+                                _confidence.isNotEmpty
+                                    ? "Terdeteksi: $_outputLabel ($_confidence)"
+                                    : "Terdeteksi: $_outputLabel",
+                                style: bodyText.copyWith(
+                                  color: backgroundColor, 
+                                  fontWeight: bold, 
+                                  fontSize: responsiveFont(context, 14),
+                                ),
+                              ),
                             ),
-                            child: Text(
-                              "Terdeteksi: $_outputLabel ($_confidence)",
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        )
+                          )
                     ],
                   ),
                 ),
@@ -415,10 +567,8 @@ class _CameraPageState extends State<CameraPage> {
                 child: Container(
                   width: sw,
                   padding: EdgeInsets.all(responsiveFont(context, 15)),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0,2))]
+                  decoration: cardDecoration.copyWith(
+                    boxShadow: cardDecoration.boxShadow,
                   ),
                   child: Column(
                     children: [
@@ -431,7 +581,8 @@ class _CameraPageState extends State<CameraPage> {
                             duration: const Duration(milliseconds: 300),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _showGifView ? Colors.orange.withOpacity(0.1) : (_isUserTyping ? Colors.blue.withOpacity(0.1) : Colors.green.withOpacity(0.1)),
+                              // Warna berubah tergantung mode
+                              color: _showGifView ? primaryColor.withOpacity(0.2) : (_isUserTyping ? infoColor.withOpacity(0.15) : successColor.withOpacity(0.15)),
                               borderRadius: BorderRadius.circular(20)
                             ),
                             child: Row(
@@ -439,15 +590,14 @@ class _CameraPageState extends State<CameraPage> {
                                 Icon(
                                   _showGifView ? Icons.translate : (_isUserTyping ? Icons.keyboard : Icons.camera_alt), 
                                   size: 14, 
-                                  color: _showGifView ? Colors.orange : (_isUserTyping ? Colors.blue : Colors.green)
+                                  color: _showGifView ? primaryColor : (_isUserTyping ? infoColor : successColor)
                                 ),
                                 const SizedBox(width: 5),
                                 Text(
                                   _showGifView ? "Hasil Translate" : (_isUserTyping ? "Mode Ketik" : "Mode Kamera"),
-                                  style: TextStyle(
-                                    fontSize: 12, 
-                                    color: _showGifView ? Colors.orange : (_isUserTyping ? Colors.blue : Colors.green), 
-                                    fontWeight: FontWeight.bold
+                                  style: smallText.copyWith(
+                                    color: _showGifView ? primaryColor : (_isUserTyping ? infoColor : successColor), 
+                                    fontWeight: bold
                                   ),
                                 ),
                               ],
@@ -458,11 +608,12 @@ class _CameraPageState extends State<CameraPage> {
                       const SizedBox(height: 10),
                       Expanded(
                         child: Container(
-                           padding: const EdgeInsets.symmetric(horizontal: 15),
-                           decoration: BoxDecoration(
-                             color: greyColor.withOpacity(0.1),
-                             borderRadius: BorderRadius.circular(12)
-                           ),
+                            padding: const EdgeInsets.symmetric(horizontal: 15),
+                            decoration: BoxDecoration(
+                              color: secondaryBackground,
+                              borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: greyColor.withOpacity(0.5)),
+                            ),
                           child: Row(
                             children: [
                               Expanded(
@@ -474,7 +625,8 @@ class _CameraPageState extends State<CameraPage> {
                                     hintStyle: bodyText.copyWith(color: greyColor),
                                     border: InputBorder.none,
                                   ),
-                                  style: bodyText.copyWith(fontSize: responsiveFont(context, 16)),
+                                  style: bodyText.copyWith(fontSize: responsiveFont(context, 14), color: accentColor),
+                                  // Saat tekan Enter, panggil fungsi Translate
                                   onSubmitted: (value) => _translateTextToSign(),
                                 ),
                               ),
@@ -482,8 +634,8 @@ class _CameraPageState extends State<CameraPage> {
                                 onPressed: _translateTextToSign,
                                 icon: Container(
                                   padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(color: accentColor, shape: BoxShape.circle),
-                                  child: const Icon(Icons.search, color: Colors.white, size: 20),
+                                  decoration: BoxDecoration(color: primaryColor, shape: BoxShape.circle),
+                                  child: Icon(Icons.search, color: backgroundColor, size: 20),
                                 ),
                               )
                             ],

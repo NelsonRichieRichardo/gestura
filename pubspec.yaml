@@ -16,10 +16,13 @@ dependencies:
     sdk: flutter
   flutter_feather_icons: ^2.0.0+1
   google_fonts: ^6.3.2
-  camera: ^0.10.5+9 
+  camera: ^0.11.3
   shared_preferences: ^2.2.2
   country_picker: ^2.0.20
   tflite_flutter: ^0.12.1
+  google_mlkit_pose_detection: ^0.14.0
+  google_mlkit_commons: ^0.11.0
+  
 
 dev_dependencies:
   flutter_test:
