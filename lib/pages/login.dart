@@ -5,14 +5,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Tambahkan imports untuk Social Login
-import 'package:google_sign_in/google_sign_in.dart'; // Untuk Google Login
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart'; // Untuk Facebook Login
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
+// Asumsi imports ini berisi definisi warna, font weight, dan fungsi helper
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:gestura/pages/register.dart';
 import 'package:gestura/pages/home.dart';
 import 'package:gestura/components/loading_overlay.dart';
-
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -42,7 +42,7 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _resetEmailController.dispose(); // Jangan lupa dispose controller baru
+    _resetEmailController.dispose();
     super.dispose();
   }
 
@@ -61,15 +61,16 @@ class _LoginPageState extends State<LoginPage> {
         });
       }
     } catch (e) {
-      print("Error loading credentials: $e");
+      // Tidak perlu menampilkan error ke user, cukup log
+      debugPrint("Error loading credentials: $e");
     }
   }
 
   Future<void> _saveUserCredentials() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (_rememberMe) {
-      await prefs.setString('email', _emailController.text);
-      await prefs.setString('password', _passwordController.text);
+      await prefs.setString('email', _emailController.text.trim());
+      await prefs.setString('password', _passwordController.text.trim());
       await prefs.setBool('remember_me', true);
     } else {
       await prefs.remove('email');
@@ -166,11 +167,11 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       LoadingOverlay.hide(context);
       
-      // Tampilkan notifikasi sukses (praktik terbaik keamanan)
+      // Menggunakan pesan generik untuk keamanan (praktik terbaik)
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'),
-          backgroundColor: successColor, // Menggunakan successColor dari app_theme
+          content: const Text('Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'),
+          backgroundColor: successColor, 
         ),
       );
       _resetEmailController.clear();
@@ -179,17 +180,18 @@ class _LoginPageState extends State<LoginPage> {
       LoadingOverlay.hide(context);
       
       String message = "Gagal mengirim tautan reset.";
-      // Menggunakan pesan generik untuk 'user-not-found' untuk keamanan
+      
       if (e.code == 'invalid-email') {
         message = 'Format email tidak valid.';
       } else if (e.code == 'user-not-found' || e.code == 'missing-email') {
-          message = 'Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'; // Pesan umum untuk keamanan
+          // Pesan umum untuk keamanan, tidak memberi tahu apakah email benar-benar ada
+          message = 'Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'; 
       } else {
         message = 'Terjadi kesalahan: ${e.message}';
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: dangerColor), // Menggunakan dangerColor
+        SnackBar(content: Text(message), backgroundColor: dangerColor), 
       );
     } catch (e) {
       if (!mounted) return;
@@ -203,6 +205,7 @@ class _LoginPageState extends State<LoginPage> {
   // --- FUNGSI BANTU UNTUK NAVIGASI SETELAH LOGIN BERHASIL ---
 
   Future<void> _navigateToHome(String uid) async {
+    // Simulasi pengambilan data username
     DocumentSnapshot userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -212,7 +215,8 @@ class _LoginPageState extends State<LoginPage> {
 
     if (userDoc.exists && userDoc.data() != null) {
       final data = userDoc.data() as Map<String, dynamic>;
-      username = data['username'] ?? "Mate";
+      // Asumsi field username ada di Firestore
+      username = data['username'] ?? "Mate"; 
     }
 
     if (!mounted) return;
@@ -250,7 +254,6 @@ class _LoginPageState extends State<LoginPage> {
 
       String uid = userCredential.user!.uid;
 
-      // Pindah ke fungsi helper
       await _navigateToHome(uid);
 
     } on FirebaseAuthException catch (e) {
@@ -260,12 +263,12 @@ class _LoginPageState extends State<LoginPage> {
 
         if (e.code == 'user-not-found') {
           message = 'No user found for that email.';
-        } else if (e.code == 'wrong-password') {
-          message = 'Wrong password provided.';
+        } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+          message = 'Invalid email or password.';
         } else if (e.code == 'invalid-email') {
           message = 'The email address is not valid.';
-        } else if (e.code == 'invalid-credential') {
-          message = 'Invalid email or password.';
+        } else {
+           message = 'Login failed: ${e.message}';
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -291,7 +294,8 @@ class _LoginPageState extends State<LoginPage> {
     LoadingOverlay.show(context);
     try {
       // 1. Pemicu alur autentikasi.
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) {
         // Pengguna membatalkan proses sign in
@@ -340,7 +344,10 @@ class _LoginPageState extends State<LoginPage> {
     LoadingOverlay.show(context);
     try {
       // 1. Pemicu alur login Facebook.
-      final LoginResult result = await FacebookAuth.instance.login(); 
+      final LoginResult result = await FacebookAuth.instance.login(
+        // Tambahkan permissions yang dibutuhkan, termasuk email
+        permissions: ['email', 'public_profile'],
+      );
 
       if (result.status == LoginStatus.success) {
         // 2. Dapatkan Access Token.
@@ -361,16 +368,17 @@ class _LoginPageState extends State<LoginPage> {
         LoadingOverlay.hide(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Facebook login dibatalkan.'),
+            content: const Text('Facebook login dibatalkan.'),
             backgroundColor: dangerColor,
           ),
         );
       } else {
         if (!mounted) return;
         LoadingOverlay.hide(context);
+        // Tangani error seperti 'permission denied', 'network error', dll.
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Facebook login gagal: ${result.message}'),
+            content: Text('Facebook login gagal: ${result.message ?? "Unknown error"}'),
             backgroundColor: dangerColor,
           ),
         );
@@ -396,6 +404,8 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // --- WIDGET HELPER ---
+
   Widget _inputField({
     required String hint,
     required bool isPassword,
@@ -404,6 +414,8 @@ class _LoginPageState extends State<LoginPage> {
     return TextField(
       controller: controller,
       obscureText: isPassword && !_isPasswordVisible,
+      keyboardType: isPassword ? TextInputType.text : TextInputType.emailAddress,
+      style: GoogleFonts.poppins(color: accentColor),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 16),
@@ -453,14 +465,13 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // Widget _socialButton diubah agar menerima parameter onPressed
   Widget _socialButton({
     required String label,
     required bool dark,
-    required VoidCallback onPressed, // Tambahkan parameter onPressed
+    required VoidCallback onPressed,
   }) {
     return ElevatedButton(
-      onPressed: onPressed, // Gunakan onPressed yang baru
+      onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: dark ? accentColor : backgroundColor,
         foregroundColor: dark ? backgroundColor : blackColor,
@@ -468,11 +479,13 @@ class _LoginPageState extends State<LoginPage> {
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: medium),
-        side: dark ? null : BorderSide(color: greyColor.withOpacity(0.5), width: 1), // Border untuk tombol putih
+        side: dark ? null : BorderSide(color: greyColor.withOpacity(0.5), width: 1),
       ),
       child: Text(label),
     );
   }
+
+  // --- BUILD METHOD ---
 
   @override
   Widget build(BuildContext context) {
@@ -576,16 +589,16 @@ class _LoginPageState extends State<LoginPage> {
                                       fontSize: responsiveFont(
                                         context,
                                         13,
-                                      ), // Ukuran Font Save Password
+                                      ), 
                                       color: accentColor.withOpacity(0.7),
                                     ),
                                   ),
                                 ],
                               ),
 
-                              // Forgot Password (Kanan) -> Tautan yang dimodifikasi
+                              // Forgot Password (Kanan)
                               GestureDetector(
-                                onTap: _handleForgotPassword, // Panggil fungsi reset password
+                                onTap: _handleForgotPassword, 
                                 child: Text(
                                   "Forgot Password?",
                                   style: GoogleFonts.poppins(
@@ -593,7 +606,7 @@ class _LoginPageState extends State<LoginPage> {
                                       context,
                                       13,
                                     ), 
-                                    color: primaryColor, // Ubah warna agar lebih menonjol
+                                    color: primaryColor, 
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -624,7 +637,7 @@ class _LoginPageState extends State<LoginPage> {
                                 child: _socialButton(
                                   label: "Google",
                                   dark: false,
-                                  onPressed: _handleGoogleLogin, // Panggil fungsi Google Login
+                                  onPressed: _handleGoogleLogin, 
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -632,7 +645,7 @@ class _LoginPageState extends State<LoginPage> {
                                 child: _socialButton(
                                   label: "Facebook",
                                   dark: true,
-                                  onPressed: _handleFacebookLogin, // Panggil fungsi Facebook Login
+                                  onPressed: _handleFacebookLogin, 
                                 ),
                               ),
                             ],

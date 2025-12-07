@@ -40,6 +40,42 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:33594383922:android:a0444a68c1a7426e19a62b",
+        "android_client_info": {
+          "package_name": "com.smartai.gestura"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "33594383922-g25pph1dc2c0377qottkp30masqcfquo.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRYplLWH4VM3Q-n7sYc54aXUAyIso6sL8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "33594383922-g25pph1dc2c0377qottkp30masqcfquo.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "33594383922-tetiavog25a1uvdcg6meaos1mrrc62m4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.gestura"
+              }
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"

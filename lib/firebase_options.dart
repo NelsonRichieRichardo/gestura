@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCRYplLWH4VM3Q-n7sYc54aXUAyIso6sL8',
-    appId: '1:33594383922:android:a2156c4c775b9bdc19a62b',
+    appId: '1:33594383922:android:a0444a68c1a7426e19a62b',
     messagingSenderId: '33594383922',
     projectId: 'gestura-7b295',
     storageBucket: 'gestura-7b295.firebasestorage.app',
@@ -64,6 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '33594383922',
     projectId: 'gestura-7b295',
     storageBucket: 'gestura-7b295.firebasestorage.app',
+    iosClientId: '33594383922-tetiavog25a1uvdcg6meaos1mrrc62m4.apps.googleusercontent.com',
     iosBundleId: 'com.example.gestura',
   );
 
@@ -73,6 +74,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '33594383922',
     projectId: 'gestura-7b295',
     storageBucket: 'gestura-7b295.firebasestorage.app',
+    iosClientId: '33594383922-tetiavog25a1uvdcg6meaos1mrrc62m4.apps.googleusercontent.com',
     iosBundleId: 'com.example.gestura',
   );
 
