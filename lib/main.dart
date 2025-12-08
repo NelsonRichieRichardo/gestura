@@ -23,11 +23,7 @@ void main() async {
   // Tunggu init firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // =========================================================
-  // ✅ SOLUSI UNTUK MENGHAPUS SESI SAAT APLIKASI DI-RESTART
-  // Ini akan memaksa semua pengguna untuk melalui Onboarding/Login
-  // setiap kali aplikasi dimulai ulang.
-  // =========================================================
+  // Menghapus Sesi
   try {
     await FirebaseAuth.instance.signOut();
     print("Sesi Firebase berhasil dihapus saat aplikasi dimulai ulang.");
