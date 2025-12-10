@@ -26,4 +26,14 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
 }
 
+dependencyResolutionManagement {
+    // BARIS PENTING INI HARUS ADA!
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT) 
+    repositories {
+        google() 
+        mavenCentral()
+        maven { url = uri("https://download.flutter.io") }
+    }
+}
+
 include(":app")

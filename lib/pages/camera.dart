@@ -4,17 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle, WriteBuffer;
 import 'package:camera/camera.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart'; 
-import 'package:google_mlkit_commons/google_mlkit_commons.dart' as ml_kit_commons; 
+import 'package:hand_landmarker/hand_landmarker.dart';
 import 'dart:typed_data';
 
 // --- ASUMSI IMPORT/CONFIG (Silakan sesuaikan dengan path Anda) ---
-// Asumsikan AppTheme, responsiveHeight, responsiveFont, screenWidth, 
-// bodyText, heading1, smallText, cardDecoration, primaryColor, 
-// accentColor, backgroundColor, secondaryBackground, dangerColor, 
-// infoColor, successColor, greyColor, blackColor, bold, medium ada di sini
-import 'package:gestura/core/themes/app_theme.dart'; 
-import '../main.dart'; // Asumsikan 'cameras' dan 'isCameraAvailable' diimpor dari main.dart
+// Asumsikan semua utilitas tema dan variabel global ada di sini
+import 'package:gestura/core/themes/app_theme.dart';
+import '../main.dart';
 // -------------------------------------------------------------
 
 class CameraPage extends StatefulWidget {
@@ -25,41 +21,39 @@ class CameraPage extends StatefulWidget {
 }
 
 class _CameraPageState extends State<CameraPage> {
-  // --- TFLITE_FLUTTER & POSE DETECTOR STATE ---
+  // --- TFLITE_FLUTTER & HAND LANDMARKER STATE ---
   Interpreter? _interpreter;
   List<String> _labels = [];
   bool _isModelLoaded = false;
-  late final PoseDetector _poseDetector;
 
-  // Model Keypoint Properties 
+  HandLandmarkerPlugin? _plugin;
+
   final int SEQUENCE_LENGTH = 30;
-  // 33 landmarks * 3 (x, y, z) = 63 features
-  final int KEYPOINT_VECTOR_SIZE = 63; 
-  
-  // Buffer untuk menyimpan urutan keypoint (30 frame)
+  final int KEYPOINT_VECTOR_SIZE = 63;
+
   List<List<double>> _sequenceBuffer = [];
   // ----------------------------------------------------------------------
 
-  // --- KAMERA & POSE LANDMARKER DATA ---
-  CameraController? _cameraController; 
-  Future<void>? _initializeControllerFuture; 
-  int selectedCameraIndex = 0; 
-  bool _isInitialized = false; 
-  bool _hasInitializationError = false; 
-  bool _isDetecting = false; // Flag untuk mencegah pemrosesan serentak
+  // --- KAMERA & LANDMARKER DATA ---
+  CameraController? _controller;
+  Future<void>? _initializeControllerFuture;
+  int selectedCameraIndex = 0;
+  bool _isInitialized = false;
+  bool _hasInitializationError = false;
+  bool _isDetecting = false;
 
-  // --- POSE DATA UNTUK PAINTER ---
-  Pose? _currentPose; 
-  Size _previewSize = Size.zero; 
+  // --- LANDMARK DATA UNTUK PAINTER ---
+  List<Hand> _currentHands = [];
+  Size _previewSize = Size.zero;
   CameraLensDirection _lensDirection = CameraLensDirection.front;
+  int _sensorOrientation = 0;
 
   // --- LOGIC DETEKSI & TRANSLATE ---
-  String _outputLabel = "Tunggu Deteksi..."; 
+  String _outputLabel = "Tunggu Deteksi...";
   String _confidence = "";
-  
-  // State untuk Mode Tampilan (Kamera vs GIF)
-  bool _showGifView = false; 
-  String _translatedText = ""; 
+
+  bool _showGifView = false;
+  String _translatedText = "";
 
   // --- INPUT TEXT ---
   final TextEditingController _textController = TextEditingController();
@@ -69,30 +63,25 @@ class _CameraPageState extends State<CameraPage> {
   @override
   void initState() {
     super.initState();
-    
-    // Inisialisasi ML Kit Pose Detector
-    final options = PoseDetectorOptions(
-      model: PoseDetectionModel.accurate,
-      mode: PoseDetectionMode.stream,
-    );
-    _poseDetector = PoseDetector(options: options);
 
     _loadTfliteModel();
+
     if (isCameraAvailable && cameras.isNotEmpty) {
-      final initialIndex = cameras.indexWhere((camera) => camera.lensDirection == CameraLensDirection.front);
-      selectedCameraIndex = initialIndex != -1 ? initialIndex : 0; 
-      _initializeController();
+      final initialIndex = cameras.indexWhere(
+        (cam) => cam.lensDirection == CameraLensDirection.front,
+      );
+      selectedCameraIndex = initialIndex != -1 ? initialIndex : 0;
+      _initialize(); // Memanggil inisialisasi synchronous
     }
     _inputFocusNode.addListener(() {
       setState(() {
         _isUserTyping = _inputFocusNode.hasFocus;
-        // Hentikan stream jika pengguna mulai mengetik
         if (_isUserTyping) {
-            _cameraController?.stopImageStream();
-            _currentPose = null; // Bersihkan tampilan pose
-            _sequenceBuffer.clear(); // Bersihkan buffer
+          _controller?.stopImageStream();
+          _currentHands.clear();
+          _sequenceBuffer.clear();
         } else if (_isInitialized && _isModelLoaded && !_showGifView) {
-             _startImageStream(); // Lanjutkan stream jika keyboard ditutup
+          _startImageStream();
         }
       });
     });
@@ -101,9 +90,10 @@ class _CameraPageState extends State<CameraPage> {
   // --- 1. MEMUAT MODEL (TFLITE) ---
   Future<void> _loadTfliteModel() async {
     try {
-      // Pastikan path model sudah benar
-      _interpreter = await Interpreter.fromAsset("assets/models/sign_language_model.tflite");
-      
+      _interpreter = await Interpreter.fromAsset(
+        "assets/models/sign_language_model.tflite",
+      );
+
       final labelData = await rootBundle.loadString("assets/models/labels.txt");
       _labels = labelData
           .split('\n')
@@ -111,270 +101,230 @@ class _CameraPageState extends State<CameraPage> {
           .where((s) => s.isNotEmpty)
           .toList();
 
+      // PERINGATAN: Harus 28 kelas untuk menghindari output shape mismatch
+      if (_labels.length != 28) {
+        debugPrint(
+          "WARNING: Labels length is ${_labels.length}. Model expects 28.",
+        );
+      }
+
       if (mounted) {
         setState(() {
           _isModelLoaded = true;
-          if (_isInitialized && !_isUserTyping && !_showGifView) {
+          if (_isInitialized && _plugin != null) {
             _startImageStream();
           }
         });
       }
     } catch (e) {
       print("Error loading model or labels: $e");
-      // Menambahkan setState untuk menunjukkan error loading
-      if (mounted) {
-        setState(() {
-          _outputLabel = "ERROR: Gagal memuat model.";
-        });
-      }
     }
   }
 
-  // --- 2. ML KIT UTILITIES: Ekstraksi Keypoint (Normalisasi) ---
-  List<double> _extractKeypoints(List<Pose> poses) {
-    if (poses.isNotEmpty) {
-      final pose = poses.first;
-      List<double> keypoints = [];
-      
-      // Ambil landmark dalam urutan yang konsisten (sesuai urutan keys())
-      // ML Kit Pose Landmarks harus memiliki 33 titik
-      for (final landmarkType in pose.landmarks.keys) {
-        final landmark = pose.landmarks[landmarkType]!;
-        keypoints.add(landmark.x);
-        keypoints.add(landmark.y);
-        // Z juga ditambahkan
-        keypoints.add(landmark.z); 
-        // Optional: tambahkan visibility/likelihood jika model Anda menggunakannya
-        // keypoints.add(landmark.likelihood); 
+  // --- INISIALISASI SYNCHRONOUS (Menggabungkan Camera dan Plugin) ---
+  Future<void> _initialize() async {
+    final camera = cameras.firstWhere(
+      (cam) => cam.lensDirection == CameraLensDirection.front,
+      orElse: () => cameras.first,
+    );
+
+    _controller = CameraController(
+      camera,
+      ResolutionPreset.medium,
+      enableAudio: false,
+    );
+
+    // INISIALISASI PLUGIN SYNCHRONOUS
+    _plugin = HandLandmarkerPlugin.create(
+      numHands: 1,
+      minHandDetectionConfidence: 0.5,
+      delegate: HandLandmarkerDelegate.GPU,
+    );
+
+    // Inisialisasi controller dan simpan data kamera
+    _initializeControllerFuture = _controller!
+        .initialize()
+        .then((_) async {
+          if (_controller!.value.isInitialized) {
+            _previewSize = _controller!.value.previewSize ?? Size.zero;
+            _lensDirection = _controller!.description.lensDirection;
+            _sensorOrientation = _controller!.description.sensorOrientation;
+
+            // Mulai stream gambar
+            await _controller!.startImageStream(_processCameraImage);
+
+            if (mounted) {
+              setState(() => _isInitialized = true);
+            }
+          }
+        })
+        .catchError((error) {
+          print("Initialization Error: $error");
+          if (mounted)
+            setState(() {
+              _hasInitializationError = true;
+              _isInitialized = false;
+            });
+        });
+  }
+
+  @override
+  void dispose() {
+    _controller?.stopImageStream();
+    _controller?.dispose();
+    _interpreter?.close();
+    _plugin?.dispose(); // DISPOSE PLUGIN SYNCHRONOUS
+    _textController.dispose();
+    _inputFocusNode.dispose();
+    super.dispose();
+  }
+
+  // --- 2. LOGIC PEMROSESAN FRAME SYNCHRONOUS (Sesuai dokumentasi) ---
+  Future<void> _processCameraImage(CameraImage image) async {
+    // Gunakan guard untuk mencegah pemrosesan serentak
+    if (_isDetecting || !_isInitialized || _plugin == null) return;
+    _isDetecting = true;
+
+    try {
+      // DETEKSI SYNCHRONOUS: Menggunakan HandLandmarkerPlugin
+      final hands = _plugin!.detect(
+        image,
+        _controller!.description.sensorOrientation,
+      );
+
+      if (mounted) {
+        // Update tampilan visual
+        setState(() => _currentHands = hands);
       }
 
-      // Harus selalu 99 jika 33 landmarks terdeteksi
+      // --- EKSTRAKSI KEYPOINT & INFERENSI TFLITE ---
+      if (hands.isNotEmpty && _interpreter != null) {
+        final keypoints = _extractKeypoints(hands);
+        _sequenceBuffer.add(keypoints);
+
+        if (_sequenceBuffer.length > SEQUENCE_LENGTH) {
+          _sequenceBuffer = _sequenceBuffer.sublist(
+            _sequenceBuffer.length - SEQUENCE_LENGTH,
+          );
+        }
+
+        if (_sequenceBuffer.length == SEQUENCE_LENGTH) {
+          _runTfliteInference(); // Panggil fungsi inferensi terpisah
+        }
+      } else {
+        _sequenceBuffer.clear();
+      }
+    } catch (e) {
+      debugPrint('Error detecting landmarks or running TFLite: $e');
+    } finally {
+      _isDetecting = false; // Izinkan frame berikutnya diproses
+    }
+  }
+
+  // Fungsi terpisah untuk menjalankan TFLite Inference
+  void _runTfliteInference() {
+    // Input TFLite: [1, 30, 63]
+    final List<List<double>> inputSequence = _sequenceBuffer.map((frame) {
+      return frame.cast<double>().toList();
+    }).toList();
+    final inputTensor = [inputSequence];
+
+    // Output TFLite: [1, 28]
+    final output = [List.filled(_labels.length, 0.0)];
+
+    try {
+      _interpreter!.run(inputTensor, output);
+    } catch (e) {
+      print("Error TFLite RUN: $e");
+      return;
+    }
+
+    final modelResult = output[0] as List<double>;
+    double maxConfidence = 0.0;
+    int maxIndex = -1;
+
+    for (int i = 0; i < modelResult.length; i++) {
+      if (modelResult[i] > maxConfidence) {
+        maxConfidence = modelResult[i];
+        maxIndex = i;
+      }
+    }
+
+    const THRESHOLD = 0.70;
+
+    if (mounted) {
+      setState(() {
+        if (maxConfidence > THRESHOLD &&
+            maxIndex != -1 &&
+            maxIndex < _labels.length) {
+          String detectedChar = _labels[maxIndex];
+          _outputLabel = detectedChar;
+          _confidence = (maxConfidence * 100).toStringAsFixed(0) + "%";
+
+          String currentText = _textController.text;
+          String lastChar = currentText.isNotEmpty
+              ? currentText.substring(currentText.length - 1)
+              : "";
+
+          if (detectedChar != lastChar && detectedChar != "kosong") {
+            _textController.text = currentText + detectedChar;
+            _textController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _textController.text.length),
+            );
+            _sequenceBuffer.clear(); // KOSONGKAN BUFFER setelah deteksi
+          }
+        } else {
+          _outputLabel = "Tunggu Deteksi...";
+          _confidence = "";
+        }
+      });
+    }
+  }
+
+  // --- 3. EKSTRAKSI KEYPOINT (63 Features) ---
+  List<double> _extractKeypoints(List<Hand> hands) {
+    if (hands.isNotEmpty) {
+      final hand = hands.first;
+      List<double> keypoints = [];
+
+      for (final landmark in hand.landmarks) {
+        keypoints.add(landmark.x);
+        keypoints.add(landmark.y);
+        keypoints.add(landmark.z);
+      }
+
       if (keypoints.length >= KEYPOINT_VECTOR_SIZE) {
         return keypoints.sublist(0, KEYPOINT_VECTOR_SIZE);
       } else {
-        // Pad dengan 0.0 jika kurang (seharusnya tidak terjadi jika Pose terdeteksi)
         keypoints.addAll(
           List.filled(KEYPOINT_VECTOR_SIZE - keypoints.length, 0.0),
         );
         return keypoints;
       }
     } else {
-      // Jika tidak ada pose yang terdeteksi, berikan vektor nol
       return List.filled(KEYPOINT_VECTOR_SIZE, 0.0);
     }
   }
 
-  // --- 3. ML KIT UTILITIES: Konversi CameraImage ke InputImage ---
-  ml_kit_commons.InputImage? _inputImageFromCameraImage(CameraImage image) {
-    // [Kode utilitas ML Kit untuk konversi InputImage tetap sama]
-    if (image.format.group != ImageFormatGroup.yuv420) {
-      return null;
-    }
-
-    final allBytes = WriteBuffer();
-    for (final plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
-    }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    final Size imageSize = Size(
-      image.width.toDouble(),
-      image.height.toDouble(),
-    );
-
-    final camera = cameras[selectedCameraIndex];
-
-    final rotationInDegrees = {
-      CameraLensDirection.front: 270,
-      CameraLensDirection.back: 90,
-    }[camera.lensDirection] ?? 0;
-
-    final imageRotation =
-        ml_kit_commons.InputImageRotationValue.fromRawValue(rotationInDegrees) ??
-            ml_kit_commons.InputImageRotation.rotation0deg;
-
-    final inputImageFormat = ml_kit_commons.InputImageFormat.nv21;
-    
-    final inputImageMetadata = ml_kit_commons.InputImageMetadata(
-      size: imageSize,
-      rotation: imageRotation, 
-      format: inputImageFormat, 
-      bytesPerRow: image.planes[0].bytesPerRow, 
-    );
-
-    return ml_kit_commons.InputImage.fromBytes(
-      bytes: bytes, 
-      metadata: inputImageMetadata,
-    );
-  }
-  // --- AKHIR ML KIT UTILITIES ---
-
-  void _initializeController() {
-    if (!isCameraAvailable || cameras.isEmpty) return;
-    if (_cameraController != null) {
-      _cameraController!.dispose();
-    }
-    setState(() { _hasInitializationError = false; _isInitialized = false; });
-    
-    _cameraController = CameraController(
-      cameras[selectedCameraIndex], 
-      ResolutionPreset.medium, 
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.yuv420, 
-    );
-
-    _initializeControllerFuture = _cameraController!.initialize().then((_) {
-      if (mounted) {
-        setState(() { 
-          _isInitialized = true;
-          _previewSize = _cameraController!.value.previewSize ?? Size.zero;
-          _lensDirection = _cameraController!.description.lensDirection;
-        });
-        if (_isModelLoaded && !_isUserTyping) {
-           _startImageStream();
-        }
-      }
-    }).catchError((error) {
-       print("Camera Initialization Error: $error");
-       if (mounted) setState(() { _hasInitializationError = true; _isInitialized = false; });
-    });
-  }
-
-  // --------------------------------------------------------------------------------------------------
-  // --- 4. LOGIC INFERENSI ---
-  // --------------------------------------------------------------------------------------------------
+  // --- 4. STREAM CONTROL ---
   void _startImageStream() {
-    if (_cameraController == null || !_isModelLoaded || !_cameraController!.value.isInitialized) return;
-    if (_cameraController!.value.isStreamingImages) return; // Sudah berjalan
-
-    _cameraController!.startImageStream((CameraImage img) async {
-      if (_interpreter == null) {
-        _isDetecting = false;
-        return;
-      }
-
-      // Hanya proses jika tidak sedang mendeteksi dan tidak dalam mode input/translate
-      if (!_isDetecting && !_isUserTyping && !_showGifView) {
-        _isDetecting = true;
-        
-        try {
-          final inputImage = _inputImageFromCameraImage(img);
-
-          if (inputImage != null) {
-            final poses = await _poseDetector.processImage(inputImage);
-
-            // Simpan Pose untuk Painter Overlay
-            if (mounted) {
-              setState(() {
-                _currentPose = poses.isNotEmpty ? poses.first : null;
-              });
-            }
-
-            final keypoints = _extractKeypoints(poses);
-            _sequenceBuffer.add(keypoints);
-
-            // Jaga ukuran buffer
-            if (_sequenceBuffer.length > SEQUENCE_LENGTH) {
-              _sequenceBuffer = _sequenceBuffer.sublist(
-                _sequenceBuffer.length - SEQUENCE_LENGTH,
-              );
-            }
-
-            // Jalankan inferensi hanya ketika buffer penuh (30 frame)
-            if (_sequenceBuffer.length == SEQUENCE_LENGTH) {
-              
-              // --- PERHATIAN: Memastikan Input Shape [1, 30, 99] ---
-              
-              // Map ke List<List<double>> (Sequence, Features)
-              final List<List<double>> inputSequence = _sequenceBuffer.map((frame) {
-                  return frame.cast<double>().toList(); 
-              }).toList();
-              
-              // Bungkus dalam List lagi untuk Batch Size 1: [1, 30, 99]
-              final inputTensor = [inputSequence];
-
-              // Output shape: [1, jumlah_kelas]
-              final output = [
-                List.filled(_labels.length, 0.0),
-              ]; 
-
-              _interpreter!.run(inputTensor, output); 
-              // -------------------------------------------------------
-
-              final result = output[0] as List<double>;
-              double maxConfidence = 0.0;
-              int maxIndex = -1;
-
-              for (int i = 0; i < result.length; i++) {
-                if (result[i] > maxConfidence) {
-                  maxConfidence = result[i];
-                  maxIndex = i;
-                }
-              }
-
-              const THRESHOLD = 0.70; // Threshold Deteksi
-
-              if (mounted) {
-                setState(() {
-                  if (maxConfidence > THRESHOLD &&
-                      maxIndex != -1 &&
-                      maxIndex < _labels.length) {
-                    
-                    String detectedChar = _labels[maxIndex];
-                    _outputLabel = detectedChar;
-                    _confidence = (maxConfidence * 100).toStringAsFixed(0) + "%";
-
-                    String currentText = _textController.text;
-                    String lastChar = currentText.isNotEmpty ? currentText.substring(currentText.length - 1) : "";
-
-                    // Tambahkan hanya jika karakter yang dideteksi berbeda dari karakter terakhir
-                    if (detectedChar != lastChar && detectedChar != "kosong") { // Asumsi 'kosong' adalah kelas noise
-                      _textController.text = currentText + detectedChar;
-                      
-                      _textController.selection = TextSelection.fromPosition(
-                          TextPosition(offset: _textController.text.length)
-                      );
-
-                      // KOSONGKAN BUFFER setelah deteksi berhasil
-                      _sequenceBuffer.clear();
-                    }
-                    
-                  } else {
-                    _outputLabel = "Tunggu Deteksi...";
-                    _confidence = "";
-                  }
-                });
-              }
-            }
-          }
-        } catch (e) {
-          // Log error Bad State/failed precondition ada di sini
-          print("Error during ML/TFLite processing: $e"); 
-          if (mounted) {
-            setState(() {
-              _outputLabel = "Error TFLite! Cek Log.";
-            });
-          }
-        } finally {
-          _isDetecting = false;
-        }
-      }
-    });
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (!_controller!.value.isStreamingImages) {
+      _controller!.startImageStream(_processCameraImage);
+    }
   }
-  // --- AKHIR LOGIC INFERENSI ---
-  // --------------------------------------------------------------------------------------------------
 
   void _translateTextToSign() {
     String text = _textController.text.trim().toLowerCase();
     if (text.isEmpty) return;
 
-    _inputFocusNode.unfocus(); 
-    _cameraController?.stopImageStream(); 
-    
+    _inputFocusNode.unfocus();
+    _controller?.stopImageStream();
+
     setState(() {
-      _translatedText = text; 
-      _showGifView = true; 
-      _outputLabel = "Mode Terjemahan"; 
+      _translatedText = text;
+      _showGifView = true;
+      _outputLabel = "Mode Terjemahan";
       _confidence = "";
     });
   }
@@ -384,18 +334,17 @@ class _CameraPageState extends State<CameraPage> {
       _showGifView = false;
       _textController.clear();
       _translatedText = "";
-      _sequenceBuffer.clear(); 
-      _currentPose = null; // Clear pose
+      _sequenceBuffer.clear();
+      _currentHands.clear();
       _outputLabel = "Tunggu Deteksi...";
     });
-    // Lanjutkan stream kamera setelah mode translate ditutup
     if (_isInitialized && _isModelLoaded) {
-      _startImageStream(); 
+      _startImageStream();
     }
   }
 
+  // --- 5. WIDGET BUILDER ---
   Widget _buildGifResultView() {
-    // [Kode _buildGifResultView tetap sama]
     return Container(
       width: double.infinity,
       height: double.infinity,
@@ -411,9 +360,9 @@ class _CameraPageState extends State<CameraPage> {
             style: bodyText.copyWith(fontWeight: bold, color: accentColor),
           ),
           const SizedBox(height: 20),
-          
+
           SizedBox(
-            height: 200, 
+            height: 200,
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               scrollDirection: Axis.horizontal,
@@ -421,31 +370,43 @@ class _CameraPageState extends State<CameraPage> {
               itemCount: _translatedText.length,
               itemBuilder: (context, index) {
                 String char = _translatedText[index];
-                
+
                 if (RegExp(r'[a-z]').hasMatch(char)) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 5.0),
                     child: Column(
                       children: [
                         Container(
-                          width: 140, height: 140,
+                          width: 140,
+                          height: 140,
                           decoration: BoxDecoration(
-                            border: Border.all(color: greyColor.withOpacity(0.2)),
+                            border: Border.all(
+                              color: greyColor.withOpacity(0.2),
+                            ),
                             borderRadius: BorderRadius.circular(12),
                             color: secondaryBackground,
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Image.asset(
-                              "assets/bisindo/$char.gif", // ASUMSI PATH GIF
+                              "assets/bisindo/$char.gif",
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.broken_image, color: greyColor, size: 30),
-                                      Text(char.toUpperCase(), style: heading1.copyWith(color: greyColor)),
+                                      Icon(
+                                        Icons.broken_image,
+                                        color: greyColor,
+                                        size: 30,
+                                      ),
+                                      Text(
+                                        char.toUpperCase(),
+                                        style: heading1.copyWith(
+                                          color: greyColor,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 );
@@ -454,7 +415,10 @@ class _CameraPageState extends State<CameraPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(char.toUpperCase(), style: smallText.copyWith(fontWeight: bold)),
+                        Text(
+                          char.toUpperCase(),
+                          style: smallText.copyWith(fontWeight: bold),
+                        ),
                       ],
                     ),
                   );
@@ -469,76 +433,80 @@ class _CameraPageState extends State<CameraPage> {
           Text(
             "Geser untuk melihat huruf selanjutnya 👉",
             style: smallText.copyWith(fontSize: 10, color: greyColor),
-          )
+          ),
         ],
       ),
     );
   }
 
   Widget _buildCameraView() {
-    // [Kode _buildCameraView tetap sama]
     if (!isCameraAvailable) {
-        return Center(child: Text("Kamera tidak tersedia di Emulator\n(Gunakan HP Fisik)", textAlign: TextAlign.center, style: bodyText.copyWith(color: greyColor)));
+      return Center(
+        child: Text(
+          "Kamera tidak tersedia di Emulator\n(Gunakan HP Fisik)",
+          textAlign: TextAlign.center,
+          style: bodyText.copyWith(color: greyColor),
+        ),
+      );
     }
     return FutureBuilder<void>(
       future: _initializeControllerFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done && _isInitialized && _cameraController!.value.isInitialized) {
-            final size = _cameraController!.value.previewSize!;
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: SizedBox(
-                width: double.infinity, height: double.infinity,
-                child: FittedBox(
-                  fit: BoxFit.cover, 
-                  child: SizedBox(
-                    width: size.height, height: size.width, 
-                    child: Stack(
-                      children: [
-                        CameraPreview(_cameraController!),
-                        // --- OVERLAY POSE LANDMARK ---
-                        if (_currentPose != null && _previewSize != Size.zero)
-                          CustomPaint(
-                            size: Size.infinite,
-                            painter: PosePainter(
-                              pose: _currentPose!,
-                              previewSize: _previewSize,
-                              lensDirection: _lensDirection,
-                            ),
+        if (snapshot.connectionState == ConnectionState.done &&
+            _isInitialized &&
+            _controller!.value.isInitialized) {
+          final controller = _controller!;
+          final size = controller.value.previewSize!;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              width: double.infinity,
+              height: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: size.height,
+                  height: size.width,
+                  child: Stack(
+                    children: [
+                      CameraPreview(controller),
+                      if (_currentHands.isNotEmpty && _previewSize != Size.zero)
+                        CustomPaint(
+                          size: Size.infinite,
+                          painter: LandmarkPainter(
+                            hands: _currentHands,
+                            previewSize: _previewSize,
+                            lensDirection: _lensDirection,
+                            sensorOrientation: _sensorOrientation,
                           ),
-                        // ------------------------
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-            );
+            ),
+          );
         } else if (_hasInitializationError) {
-          return Center(child: Text("Gagal memuat kamera. Pastikan izin sudah diberikan.", style: bodyText));
+          return Center(
+            child: Text(
+              "Gagal memuat kamera. Pastikan izin sudah diberikan.",
+              style: bodyText,
+            ),
+          );
         }
         return Center(child: CircularProgressIndicator(color: primaryColor));
       },
     );
   }
 
-  @override
-  void dispose() {
-    _cameraController?.dispose();
-    _interpreter?.close();
-    _poseDetector.close();
-    _textController.dispose();
-    _inputFocusNode.dispose();
-    super.dispose();
-  }
-
+  // --- 6. BUILD METHOD ---
   @override
   Widget build(BuildContext context) {
-    // [Kode build UI tetap sama]
     final sw = screenWidth(context);
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      resizeToAvoidBottomInset: true, 
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: sw * 0.06),
@@ -546,7 +514,13 @@ class _CameraPageState extends State<CameraPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(height: responsiveHeight(context, 0.02)),
-              Text("Gestura", style: smallText.copyWith(color: accentColor.withOpacity(0.6), fontWeight: medium)),
+              Text(
+                "Gestura",
+                style: smallText.copyWith(
+                  color: accentColor.withOpacity(0.6),
+                  fontWeight: medium,
+                ),
+              ),
               SizedBox(height: responsiveHeight(context, 0.03)),
 
               // --- CONTAINER UTAMA (KAMERA / GIF) ---
@@ -561,75 +535,93 @@ class _CameraPageState extends State<CameraPage> {
                   child: Stack(
                     children: [
                       Positioned.fill(
-                        child: _showGifView 
-                            ? _buildGifResultView() 
+                        child: _showGifView
+                            ? _buildGifResultView()
                             : _buildCameraView(),
                       ),
 
-                      if (!_showGifView && isCameraAvailable && _isInitialized && cameras.length > 1) 
+                      if (!_showGifView &&
+                          isCameraAvailable &&
+                          _isInitialized &&
+                          cameras.length > 1)
                         Positioned(
-                          top: 10, right: 10,
+                          top: 10,
+                          right: 10,
                           child: InkWell(
                             onTap: () async {
-                              // Logic ganti kamera
-                              if (_cameraController != null) {
-                                await _cameraController!.stopImageStream();
-                                await _cameraController!.dispose();
+                              if (_controller != null) {
+                                await _controller!.stopImageStream();
+                                await _controller!.dispose();
                               }
                               setState(() {
-                                selectedCameraIndex = (selectedCameraIndex + 1) % cameras.length;
+                                selectedCameraIndex =
+                                    (selectedCameraIndex + 1) % cameras.length;
                                 _isInitialized = false;
-                                _currentPose = null;
+                                _currentHands.clear();
                                 _sequenceBuffer.clear();
                               });
-                              _initializeController(); 
+                              _initialize();
                             },
                             child: CircleAvatar(
                               backgroundColor: blackColor.withOpacity(0.5),
-                              child: Icon(Icons.flip_camera_ios_rounded, color: backgroundColor, size: 20),
-                            ),
-                          ),
-                        ),
-                      
-                      if (_showGifView)
-                        Positioned(
-                          top: 10, right: 10,
-                          child: InkWell(
-                            onTap: _closeTranslateView, 
-                            child: CircleAvatar(
-                              backgroundColor: dangerColor.withOpacity(0.9),
-                              child: Icon(Icons.close, color: backgroundColor, size: 24),
+                              child: Icon(
+                                Icons.flip_camera_ios_rounded,
+                                color: backgroundColor,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ),
 
-                      if (!_showGifView && !_isUserTyping && _outputLabel.isNotEmpty)
-                          Align(
-                            alignment: Alignment.bottomCenter,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 20),
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: accentColor.withOpacity(0.85),
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              child: Text(
-                                _confidence.isNotEmpty
-                                    ? "Terdeteksi: $_outputLabel ($_confidence)"
-                                    : "Status: $_outputLabel",
-                                style: bodyText.copyWith(
-                                  color: backgroundColor, 
-                                  fontWeight: bold, 
-                                  fontSize: responsiveFont(context, 14),
-                                ),
+                      if (_showGifView)
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: InkWell(
+                            onTap: _closeTranslateView,
+                            child: CircleAvatar(
+                              backgroundColor: dangerColor.withOpacity(0.9),
+                              child: Icon(
+                                Icons.close,
+                                color: backgroundColor,
+                                size: 24,
                               ),
                             ),
-                          )
+                          ),
+                        ),
+
+                      if (!_showGifView &&
+                          !_isUserTyping &&
+                          _outputLabel.isNotEmpty)
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 20),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentColor.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Text(
+                              _confidence.isNotEmpty
+                                  ? "Terdeteksi: $_outputLabel ($_confidence)"
+                                  : "Status: $_outputLabel",
+                              style: bodyText.copyWith(
+                                color: backgroundColor,
+                                fontWeight: bold,
+                                fontSize: responsiveFont(context, 14),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ),
-              
+
               SizedBox(height: responsiveHeight(context, 0.02)),
 
               // --- CONTAINER INPUT ---
@@ -646,44 +638,75 @@ class _CameraPageState extends State<CameraPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("TERJEMAHKAN:", style: smallText.copyWith(color: accentColor, fontWeight: bold)),
+                          Text(
+                            "TERJEMAHKAN:",
+                            style: smallText.copyWith(
+                              color: accentColor,
+                              fontWeight: bold,
+                            ),
+                          ),
                           // Indikator Mode
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 300),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: _showGifView ? primaryColor.withOpacity(0.2) : (_isUserTyping ? infoColor.withOpacity(0.15) : successColor.withOpacity(0.15)),
-                              borderRadius: BorderRadius.circular(20)
+                              color: _showGifView
+                                  ? primaryColor.withOpacity(0.2)
+                                  : (_isUserTyping
+                                        ? infoColor.withOpacity(0.15)
+                                        : successColor.withOpacity(0.15)),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
                               children: [
                                 Icon(
-                                  _showGifView ? Icons.translate : (_isUserTyping ? Icons.keyboard : Icons.camera_alt), 
-                                  size: 14, 
-                                  color: _showGifView ? primaryColor : (_isUserTyping ? infoColor : successColor)
+                                  _showGifView
+                                      ? Icons.translate
+                                      : (_isUserTyping
+                                            ? Icons.keyboard
+                                            : Icons.camera_alt),
+                                  size: 14,
+                                  color: _showGifView
+                                      ? primaryColor
+                                      : (_isUserTyping
+                                            ? infoColor
+                                            : successColor),
                                 ),
                                 const SizedBox(width: 5),
                                 Text(
-                                  _showGifView ? "Hasil Translate" : (_isUserTyping ? "Mode Ketik" : "Mode Kamera"),
+                                  _showGifView
+                                      ? "Hasil Translate"
+                                      : (_isUserTyping
+                                            ? "Mode Ketik"
+                                            : "Mode Kamera"),
                                   style: smallText.copyWith(
-                                    color: _showGifView ? primaryColor : (_isUserTyping ? infoColor : successColor), 
-                                    fontWeight: bold
+                                    color: _showGifView
+                                        ? primaryColor
+                                        : (_isUserTyping
+                                              ? infoColor
+                                              : successColor),
+                                    fontWeight: bold,
                                   ),
                                 ),
                               ],
                             ),
-                          )
+                          ),
                         ],
                       ),
                       const SizedBox(height: 10),
                       Expanded(
                         child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 15),
-                            decoration: BoxDecoration(
-                              color: secondaryBackground,
-                              borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: greyColor.withOpacity(0.5)),
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          decoration: BoxDecoration(
+                            color: secondaryBackground,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: greyColor.withOpacity(0.5),
                             ),
+                          ),
                           child: Row(
                             children: [
                               Expanded(
@@ -692,21 +715,34 @@ class _CameraPageState extends State<CameraPage> {
                                   focusNode: _inputFocusNode,
                                   decoration: InputDecoration(
                                     hintText: "Ketik kata di sini...",
-                                    hintStyle: bodyText.copyWith(color: greyColor),
+                                    hintStyle: bodyText.copyWith(
+                                      color: greyColor,
+                                    ),
                                     border: InputBorder.none,
                                   ),
-                                  style: bodyText.copyWith(fontSize: responsiveFont(context, 14), color: accentColor),
-                                  onSubmitted: (value) => _translateTextToSign(),
+                                  style: bodyText.copyWith(
+                                    fontSize: responsiveFont(context, 14),
+                                    color: accentColor,
+                                  ),
+                                  onSubmitted: (value) =>
+                                      _translateTextToSign(),
                                 ),
                               ),
                               IconButton(
                                 onPressed: _translateTextToSign,
                                 icon: Container(
                                   padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(color: primaryColor, shape: BoxShape.circle),
-                                  child: Icon(Icons.search, color: backgroundColor, size: 20),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.search,
+                                    color: backgroundColor,
+                                    size: 20,
+                                  ),
                                 ),
-                              )
+                              ),
                             ],
                           ),
                         ),
@@ -715,7 +751,7 @@ class _CameraPageState extends State<CameraPage> {
                   ),
                 ),
               ),
-              SizedBox(height: responsiveHeight(context, 0.02)), 
+              SizedBox(height: responsiveHeight(context, 0.02)),
             ],
           ),
         ),
@@ -724,105 +760,108 @@ class _CameraPageState extends State<CameraPage> {
   }
 }
 
-// --- Custom Painter Class untuk Visualisasi Pose ---
-class PosePainter extends CustomPainter {
-  PosePainter({
-    required this.pose, 
+// --- Custom Painter Class untuk Visualisasi Landmark Tangan ---
+
+class LandmarkPainter extends CustomPainter {
+  LandmarkPainter({
+    required this.hands, 
     required this.previewSize,
     required this.lensDirection,
+    required this.sensorOrientation,
   });
 
-  final Pose pose;
+  final List<Hand> hands; 
   final Size previewSize;
   final CameraLensDirection lensDirection;
+  final int sensorOrientation;
 
-  // Daftar koneksi standar untuk menggambar kerangka tubuh (diambil dari ML Kit Pose)
-  static final Map<PoseLandmarkType, List<PoseLandmarkType>> connections = {
-    PoseLandmarkType.nose: [PoseLandmarkType.leftEyeInner, PoseLandmarkType.rightEyeInner],
-    PoseLandmarkType.leftEyeInner: [PoseLandmarkType.leftEye],
-    PoseLandmarkType.leftEye: [PoseLandmarkType.leftEyeOuter],
-    PoseLandmarkType.leftEyeOuter: [PoseLandmarkType.leftEar],
-    PoseLandmarkType.rightEyeInner: [PoseLandmarkType.rightEye],
-    PoseLandmarkType.rightEye: [PoseLandmarkType.rightEyeOuter],
-    PoseLandmarkType.rightEyeOuter: [PoseLandmarkType.rightEar],
-    PoseLandmarkType.leftMouth: [PoseLandmarkType.rightMouth],
-    PoseLandmarkType.leftShoulder: [PoseLandmarkType.leftElbow, PoseLandmarkType.rightShoulder, PoseLandmarkType.leftHip],
-    PoseLandmarkType.rightShoulder: [PoseLandmarkType.rightElbow, PoseLandmarkType.rightHip],
-    PoseLandmarkType.leftElbow: [PoseLandmarkType.leftWrist],
-    PoseLandmarkType.rightElbow: [PoseLandmarkType.rightWrist],
-    PoseLandmarkType.leftWrist: [PoseLandmarkType.leftThumb, PoseLandmarkType.leftPinky, PoseLandmarkType.leftIndex],
-    PoseLandmarkType.rightWrist: [PoseLandmarkType.rightThumb, PoseLandmarkType.rightPinky, PoseLandmarkType.rightIndex],
-    PoseLandmarkType.leftHip: [PoseLandmarkType.leftKnee, PoseLandmarkType.rightHip],
-    PoseLandmarkType.rightHip: [PoseLandmarkType.rightKnee],
-    PoseLandmarkType.leftKnee: [PoseLandmarkType.leftAnkle],
-    PoseLandmarkType.rightKnee: [PoseLandmarkType.rightAnkle],
-    PoseLandmarkType.leftAnkle: [PoseLandmarkType.leftHeel, PoseLandmarkType.leftFootIndex],
-    PoseLandmarkType.rightAnkle: [PoseLandmarkType.rightHeel, PoseLandmarkType.rightFootIndex],
-    PoseLandmarkType.leftHeel: [PoseLandmarkType.leftFootIndex],
-    PoseLandmarkType.rightHeel: [PoseLandmarkType.rightFootIndex],
-  };
+  // Daftar koneksi untuk 21 Hand Landmarks
+  static const List<List<int>> connections = [
+    [0, 1], [1, 2], [2, 3], [3, 4], 
+    [0, 5], [5, 6], [6, 7], [7, 8], 
+    [5, 9], [9, 10], [10, 11], [11, 12], 
+    [9, 13], [13, 14], [14, 15], [15, 16], 
+    [13, 17], [0, 17], [17, 18], [18, 19], [19, 20], 
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (pose.landmarks.isEmpty) return;
-
+    if (hands.isEmpty) return;
+    
+    // 1. Tentukan Skala (Menggunakan skala terkecil dari rasio lebar/tinggi)
+    final double scaleX = size.width / previewSize.height;
+    final double scaleY = size.height / previewSize.width; 
+    final double minScale = math.min(scaleX, scaleY);
+    
     final pointPaint = Paint()
       ..color = Colors.red.shade700
-      ..strokeWidth = 10 
+      ..strokeWidth = 10 / minScale 
       ..strokeCap = StrokeCap.round;
 
     final linePaint = Paint()
       ..color = Colors.lightBlueAccent
-      ..strokeWidth = 4;
+      ..strokeWidth = 4 / minScale;
 
     canvas.save();
-
-    // Terapkan Mirroring Horizontal untuk kamera depan (selfie effect)
+    
+    // 2. Terapkan Transformasi Kanvas (Rotasi dan Mirroring)
+    final double radians = 90 * math.pi / 180; // Sudut 90 derajat ke kanan (searah jarum jam)
+    
     final center = Offset(size.width / 2, size.height / 2);
     canvas.translate(center.dx, center.dy);
+    
+    // >>> PENAMBAHAN ROTASI 90 DERAJAT KE KANAN <<<
+    // Rotasi dilakukan di tengah kanvas
+    canvas.rotate(radians); 
+
+    // Mirroring untuk Kamera Depan (Setelah Rotasi)
     if (lensDirection == CameraLensDirection.front) {
       canvas.scale(-1, 1);
     }
-    canvas.translate(-center.dx, -center.dy);
     
+    // Kembalikan ke posisi awal
+    canvas.translate(-center.dx, -center.dy);
+
+    
+    // 3. Hitung Dimensi Pemetaan yang Benar
+    // Karena kita sudah memutar kanvas 90 derajat, dimensi pemetaan harus disesuaikan.
+    // Jika kita memutar 90 derajat, X (horizontal) menjadi Y (vertikal), dan Y menjadi X.
+    
+    // Dimensi Preview yang diputar
+    // Kita harus menggunakan dimensi widget (size) karena transformasi kanvas sudah memutarnya.
     final double logicalWidth = size.width;
     final double logicalHeight = size.height;
 
-    // 1. Menggambar Koneksi (Tulang)
-    for (final startType in connections.keys) {
-      final startLandmark = pose.landmarks[startType];
-      if (startLandmark == null) continue;
+
+    for (final hand in hands) {
+      final landmarks = hand.landmarks;
       
-      final startPoint = Offset(
-        startLandmark.x * logicalWidth, 
-        startLandmark.y * logicalHeight,
-      );
+      // Menggambar Koneksi dan Landmark
+      for (final connection in connections) {
+          final start = landmarks[connection[0]]; 
+          final end = landmarks[connection[1]];
 
-      for (final endType in connections[startType]!) {
-        final endLandmark = pose.landmarks[endType];
-        if (endLandmark == null) continue;
+          // Koordinat harus dikalikan dengan skala dan dimensi logis
+          final startPoint = Offset(
+            start.x * logicalWidth * minScale, 
+            start.y * logicalHeight * minScale,
+          );
 
-        final endPoint = Offset(
-          endLandmark.x * logicalWidth,
-          endLandmark.y * logicalHeight,
+          final endPoint = Offset(
+            end.x * logicalWidth * minScale,
+            end.y * logicalHeight * minScale,
+          );
+          
+          canvas.drawLine(startPoint, endPoint, linePaint);
+      }
+
+      for (final landmark in landmarks) {
+        final point = Offset(
+          landmark.x * logicalWidth * minScale, 
+          landmark.y * logicalHeight * minScale,
         );
         
-        // Hanya gambar garis jika kedua titik terdeteksi dengan confidence tinggi
-        if (startLandmark.likelihood > 0.5 && endLandmark.likelihood > 0.5) {
-          canvas.drawLine(startPoint, endPoint, linePaint);
-        }
-      }
-    }
-
-    // 2. Menggambar Landmark (Sendi)
-    for (final landmark in pose.landmarks.values) {
-      final point = Offset(
-        landmark.x * logicalWidth, 
-        landmark.y * logicalHeight,
-      );
-      
-      if (landmark.likelihood > 0.5) { 
-        canvas.drawCircle(point, 5, pointPaint);
+        canvas.drawCircle(point, 5 / minScale, pointPaint);
       }
     }
     
@@ -830,7 +869,7 @@ class PosePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant PosePainter oldDelegate) {
-    return oldDelegate.pose != pose;
+  bool shouldRepaint(covariant LandmarkPainter oldDelegate) {
+    return oldDelegate.hands != hands;
   }
 }
