@@ -7,7 +7,7 @@
     <application
         android:label="gestura"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_true">
         
         <activity
             android:name=".MainActivity"

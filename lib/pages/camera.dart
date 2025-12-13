@@ -1,4 +1,3 @@
-// camera.dart (FIXED VERSION)
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -7,8 +6,6 @@ import 'package:camera/camera.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:hand_landmarker/hand_landmarker.dart';
 import 'dart:typed_data';
-
-// --- IMPORT SESUAIKAN DENGAN PROJECT ANDA ---
 import 'package:gestura/core/themes/app_theme.dart';
 import '../main.dart';
 // ---------------------------------------------
@@ -250,8 +247,7 @@ class _CameraPageState extends State<CameraPage> {
       }
     }
 
-    // ✅ PERBAIKAN: Turunkan threshold dari 0.70 ke 0.50
-    const THRESHOLD = 0.50;
+    const THRESHOLD = 0.75;
 
     if (mounted) {
       setState(() {

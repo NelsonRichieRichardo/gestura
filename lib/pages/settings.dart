@@ -23,10 +23,10 @@ class SettingsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(height: responsiveHeight(context, 0.02)),
-              
+
               // Title
               Text(
-                "Setting", 
+                "Setting",
                 style: GoogleFonts.poppins(
                   fontSize: responsiveFont(context, 28),
                   fontWeight: bold,
@@ -37,83 +37,98 @@ class SettingsPage extends StatelessWidget {
 
               // Group 1: Policies & Profile
               _buildSettingGroup(
-                context, 
+                context,
                 items: [
                   _buildSettingItem(
-                    context, 
-                    title: "Privacy Policy", 
-                    icon: Icons.description, 
-                    iconColor: dangerColor,
-                    onTap: () async {
-                    // Tampilkan Loading
-                    LoadingOverlay.show(context);
-                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
-
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const PrivacyPolicyPage()),
-                    );
-
-                    // Sembunyikan Loading setelah navigasi selesai
-                    LoadingOverlay.hide(context);
-                  },
-                  ),
-                  _buildSettingItem(
-                    context, 
-                    title: "Terms and Condition", 
-                    icon: Icons.gavel, 
-                    iconColor: successColor,
-                    onTap: () async {
-                    // Tampilkan Loading
-                    LoadingOverlay.show(context);
-                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
-
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const TermsAndConditionsPage()),
-                    );
-
-                    // Sembunyikan Loading setelah navigasi selesai
-                    LoadingOverlay.hide(context);
-                  },
-                  ),
-                  _buildSettingItem(
-                    context, 
-                    title: "Profile", 
-                    icon: Icons.person, 
+                    context,
+                    title: "Profile",
+                    icon: Icons.person,
                     iconColor: infoColor,
                     onTap: () async {
-                    // Tampilkan Loading
-                    LoadingOverlay.show(context);
-                    await Future.delayed(const Duration(milliseconds: 700)); // Delay simulasi
+                      // Tampilkan Loading
+                      LoadingOverlay.show(context);
+                      await Future.delayed(
+                        const Duration(milliseconds: 700),
+                      ); // Delay simulasi
 
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const ProfilePage()),
-                    );
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ProfilePage(),
+                        ),
+                      );
 
-                    // Sembunyikan Loading setelah navigasi selesai
-                    LoadingOverlay.hide(context);
-                  },
+                      // Sembunyikan Loading setelah navigasi selesai
+                      LoadingOverlay.hide(context);
+                    },
+                  ),
+                  _buildSettingItem(
+                    context,
+                    title: "Privacy Policy",
+                    icon: Icons.description,
+                    iconColor: dangerColor,
+                    onTap: () async {
+                      // Tampilkan Loading
+                      LoadingOverlay.show(context);
+                      await Future.delayed(
+                        const Duration(milliseconds: 700),
+                      ); // Delay simulasi
+
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PrivacyPolicyPage(),
+                        ),
+                      );
+
+                      // Sembunyikan Loading setelah navigasi selesai
+                      LoadingOverlay.hide(context);
+                    },
+                  ),
+                  _buildSettingItem(
+                    context,
+                    title: "Terms and Condition",
+                    icon: Icons.gavel,
+                    iconColor: successColor,
+                    onTap: () async {
+                      // Tampilkan Loading
+                      LoadingOverlay.show(context);
+                      await Future.delayed(
+                        const Duration(milliseconds: 700),
+                      ); // Delay simulasi
+
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const TermsAndConditionsPage(),
+                        ),
+                      );
+
+                      // Sembunyikan Loading setelah navigasi selesai
+                      LoadingOverlay.hide(context);
+                    },
                   ),
                 ],
               ),
-              
+
               SizedBox(height: responsiveHeight(context, 0.04)),
-              
+
               // Group 2: Stay in touch
               Text(
-                "Stay in touch", 
-                style: bodyText.copyWith(color: accentColor.withOpacity(0.6), fontWeight: bold),
+                "Stay in touch",
+                style: bodyText.copyWith(
+                  color: accentColor.withOpacity(0.6),
+                  fontWeight: bold,
+                ),
               ),
               SizedBox(height: responsiveHeight(context, 0.015)),
               _buildSettingGroup(
-                context, 
+                context,
                 items: [
                   _buildSettingItem(
-                    context, 
-                    title: "Send Feedback", 
-                    icon: Icons.star_rate, 
+                    context,
+                    title: "Send Feedback",
+                    icon: Icons.star_rate,
                     iconColor: Colors.deepPurple,
                     onTap: () {},
                   ),
@@ -121,23 +136,31 @@ class SettingsPage extends StatelessWidget {
               ),
 
               SizedBox(height: responsiveHeight(context, 0.04)),
-              
+
               // Logout Button (dapat diletakkan di sini atau di Profile)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text("Logout", style: bodyText.copyWith(color: dangerColor, fontWeight: bold)),
+                title: Text(
+                  "Logout",
+                  style: bodyText.copyWith(
+                    color: dangerColor,
+                    fontWeight: bold,
+                  ),
+                ),
                 trailing: Icon(Icons.logout, color: dangerColor),
                 onTap: () {
                   ScaffoldMessenger.of(context).hideCurrentSnackBar();
                   Navigator.pushAndRemoveUntil(
-                    context, 
-                    MaterialPageRoute(builder: (context) => const LoginPage()), 
-                    (route) => false
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                    (route) => false,
                   );
                 },
               ),
 
-              SizedBox(height: responsiveHeight(context, 0.15)), // Ruang untuk FAB
+              SizedBox(
+                height: responsiveHeight(context, 0.15),
+              ), // Ruang untuk FAB
             ],
           ),
         ),
@@ -145,7 +168,10 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingGroup(BuildContext context, {required List<Widget> items}) {
+  Widget _buildSettingGroup(
+    BuildContext context, {
+    required List<Widget> items,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: secondaryBackground,
@@ -158,16 +184,20 @@ class SettingsPage extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        children: items.map((item) => item).toList(),
-      ),
+      child: Column(children: items.map((item) => item).toList()),
     );
   }
-  
-  Widget _buildSettingItem(BuildContext context, {required String title, required IconData icon, required Color iconColor, required VoidCallback onTap}) {
+
+  Widget _buildSettingItem(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
     // Tambahkan Divider kecuali untuk item terakhir
-    final isLast = title == "Send Feedback"; 
-    
+    final isLast = title == "Send Feedback";
+
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -186,7 +216,11 @@ class SettingsPage extends StatelessWidget {
                     color: iconColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, color: backgroundColor, size: responsiveFont(context, 20)),
+                  child: Icon(
+                    icon,
+                    color: backgroundColor,
+                    size: responsiveFont(context, 20),
+                  ),
                 ),
                 SizedBox(width: responsiveWidth(context, 0.04)),
                 // Title
@@ -197,12 +231,19 @@ class SettingsPage extends StatelessWidget {
                   ),
                 ),
                 // Arrow
-                Icon(Icons.arrow_forward_ios, color: greyColor, size: responsiveFont(context, 16)),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: greyColor,
+                  size: responsiveFont(context, 16),
+                ),
               ],
             ),
             if (!isLast)
               Padding(
-                padding: EdgeInsets.only(left: responsiveWidth(context, 0.15), top: responsiveHeight(context, 0.01)),
+                padding: EdgeInsets.only(
+                  left: responsiveWidth(context, 0.15),
+                  top: responsiveHeight(context, 0.01),
+                ),
                 child: Divider(color: greyColor.withOpacity(0.3), height: 1),
               ),
           ],
