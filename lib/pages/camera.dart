@@ -1,3 +1,4 @@
+// camera.dart (FIXED VERSION)
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -7,11 +8,10 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:hand_landmarker/hand_landmarker.dart';
 import 'dart:typed_data';
 
-// --- ASUMSI IMPORT/CONFIG (Silakan sesuaikan dengan path Anda) ---
-// Asumsikan semua utilitas tema dan variabel global ada di sini
+// --- IMPORT SESUAIKAN DENGAN PROJECT ANDA ---
 import 'package:gestura/core/themes/app_theme.dart';
 import '../main.dart';
-// -------------------------------------------------------------
+// ---------------------------------------------
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -32,6 +32,10 @@ class _CameraPageState extends State<CameraPage> {
   final int KEYPOINT_VECTOR_SIZE = 63;
 
   List<List<double>> _sequenceBuffer = [];
+
+  // ✅ PERBAIKAN: Turunkan voting window untuk responsif lebih baik
+  final List<String> _recentDetections = [];
+  final int _VOTING_WINDOW = 2; // Turun dari 3 ke 2
   // ----------------------------------------------------------------------
 
   // --- KAMERA & LANDMARKER DATA ---
@@ -71,15 +75,17 @@ class _CameraPageState extends State<CameraPage> {
         (cam) => cam.lensDirection == CameraLensDirection.front,
       );
       selectedCameraIndex = initialIndex != -1 ? initialIndex : 0;
-      _initialize(); // Memanggil inisialisasi synchronous
+      _initialize();
     }
+
     _inputFocusNode.addListener(() {
       setState(() {
         _isUserTyping = _inputFocusNode.hasFocus;
         if (_isUserTyping) {
           _controller?.stopImageStream();
           _currentHands.clear();
-          _sequenceBuffer.clear();
+          // ✅ PERBAIKAN: JANGAN clear sequence buffer, biarkan tetap ada
+          // _sequenceBuffer.clear(); // DIHAPUS
         } else if (_isInitialized && _isModelLoaded && !_showGifView) {
           _startImageStream();
         }
@@ -101,7 +107,6 @@ class _CameraPageState extends State<CameraPage> {
           .where((s) => s.isNotEmpty)
           .toList();
 
-      // PERINGATAN: Harus 28 kelas untuk menghindari output shape mismatch
       if (_labels.length != 28) {
         debugPrint(
           "WARNING: Labels length is ${_labels.length}. Model expects 28.",
@@ -121,7 +126,7 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  // --- INISIALISASI SYNCHRONOUS (Menggabungkan Camera dan Plugin) ---
+  // --- INISIALISASI CAMERA & PLUGIN ---
   Future<void> _initialize() async {
     final camera = cameras.firstWhere(
       (cam) => cam.lensDirection == CameraLensDirection.front,
@@ -134,14 +139,13 @@ class _CameraPageState extends State<CameraPage> {
       enableAudio: false,
     );
 
-    // INISIALISASI PLUGIN SYNCHRONOUS
+    // INISIALISASI PLUGIN
     _plugin = HandLandmarkerPlugin.create(
       numHands: 1,
       minHandDetectionConfidence: 0.5,
       delegate: HandLandmarkerDelegate.GPU,
     );
 
-    // Inisialisasi controller dan simpan data kamera
     _initializeControllerFuture = _controller!
         .initialize()
         .then((_) async {
@@ -150,7 +154,6 @@ class _CameraPageState extends State<CameraPage> {
             _lensDirection = _controller!.description.lensDirection;
             _sensorOrientation = _controller!.description.sensorOrientation;
 
-            // Mulai stream gambar
             await _controller!.startImageStream(_processCameraImage);
 
             if (mounted) {
@@ -160,11 +163,12 @@ class _CameraPageState extends State<CameraPage> {
         })
         .catchError((error) {
           print("Initialization Error: $error");
-          if (mounted)
+          if (mounted) {
             setState(() {
               _hasInitializationError = true;
               _isInitialized = false;
             });
+          }
         });
   }
 
@@ -173,27 +177,24 @@ class _CameraPageState extends State<CameraPage> {
     _controller?.stopImageStream();
     _controller?.dispose();
     _interpreter?.close();
-    _plugin?.dispose(); // DISPOSE PLUGIN SYNCHRONOUS
+    _plugin?.dispose();
     _textController.dispose();
     _inputFocusNode.dispose();
     super.dispose();
   }
 
-  // --- 2. LOGIC PEMROSESAN FRAME SYNCHRONOUS (Sesuai dokumentasi) ---
+  // --- 2. LOGIC PEMROSESAN FRAME ---
   Future<void> _processCameraImage(CameraImage image) async {
-    // Gunakan guard untuk mencegah pemrosesan serentak
     if (_isDetecting || !_isInitialized || _plugin == null) return;
     _isDetecting = true;
 
     try {
-      // DETEKSI SYNCHRONOUS: Menggunakan HandLandmarkerPlugin
       final hands = _plugin!.detect(
         image,
         _controller!.description.sensorOrientation,
       );
 
       if (mounted) {
-        // Update tampilan visual
         setState(() => _currentHands = hands);
       }
 
@@ -209,27 +210,26 @@ class _CameraPageState extends State<CameraPage> {
         }
 
         if (_sequenceBuffer.length == SEQUENCE_LENGTH) {
-          _runTfliteInference(); // Panggil fungsi inferensi terpisah
+          _runTfliteInference();
         }
       } else {
-        _sequenceBuffer.clear();
+        // ✅ PERBAIKAN: Jangan clear buffer jika tangan hilang sebentar
+        // _sequenceBuffer.clear(); // DIHAPUS
       }
     } catch (e) {
       debugPrint('Error detecting landmarks or running TFLite: $e');
     } finally {
-      _isDetecting = false; // Izinkan frame berikutnya diproses
+      _isDetecting = false;
     }
   }
 
-  // Fungsi terpisah untuk menjalankan TFLite Inference
+  // --- 3. FUNGSI INFERENSI TFLITE ---
   void _runTfliteInference() {
-    // Input TFLite: [1, 30, 63]
     final List<List<double>> inputSequence = _sequenceBuffer.map((frame) {
-      return frame.cast<double>().toList();
+      return frame.map((e) => e.toDouble()).toList();
     }).toList();
-    final inputTensor = [inputSequence];
 
-    // Output TFLite: [1, 28]
+    final inputTensor = [inputSequence]; // shape [1,30,63]
     final output = [List.filled(_labels.length, 0.0)];
 
     try {
@@ -250,7 +250,8 @@ class _CameraPageState extends State<CameraPage> {
       }
     }
 
-    const THRESHOLD = 0.70;
+    // ✅ PERBAIKAN: Turunkan threshold dari 0.70 ke 0.50
+    const THRESHOLD = 0.50;
 
     if (mounted) {
       setState(() {
@@ -258,39 +259,85 @@ class _CameraPageState extends State<CameraPage> {
             maxIndex != -1 &&
             maxIndex < _labels.length) {
           String detectedChar = _labels[maxIndex];
-          _outputLabel = detectedChar;
-          _confidence = (maxConfidence * 100).toStringAsFixed(0) + "%";
+          String confStr = (maxConfidence * 100).toStringAsFixed(0) + "%";
 
-          String currentText = _textController.text;
-          String lastChar = currentText.isNotEmpty
-              ? currentText.substring(currentText.length - 1)
-              : "";
+          // ✅ DEBUGGING: Print hasil deteksi
+          print("🔍 Detected: $detectedChar | Confidence: $confStr");
 
-          if (detectedChar != lastChar && detectedChar != "kosong") {
-            _textController.text = currentText + detectedChar;
-            _textController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _textController.text.length),
-            );
-            _sequenceBuffer.clear(); // KOSONGKAN BUFFER setelah deteksi
+          // Simple voting untuk mengurangi jitter
+          _recentDetections.add(detectedChar);
+          if (_recentDetections.length > _VOTING_WINDOW) {
+            _recentDetections.removeAt(0);
+          }
+
+          final counts = <String, int>{};
+          for (var s in _recentDetections) {
+            counts[s] = (counts[s] ?? 0) + 1;
+          }
+
+          // ✅ PERBAIKAN: Accept jika muncul minimal 1x (dari 2x)
+          String? voted;
+          counts.forEach((k, v) {
+            if (v >= 1) voted = k; // Turun dari 2 ke 1
+          });
+
+          if (voted != null) {
+            _outputLabel = voted!;
+            _confidence = confStr;
+
+            String currentText = _textController.text;
+            String lastChar = currentText.isNotEmpty
+                ? currentText.substring(currentText.length - 1)
+                : "";
+
+            if (voted != lastChar && voted != "kosong") {
+              _textController.text = currentText + voted!;
+              _textController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _textController.text.length),
+              );
+              _sequenceBuffer.clear();
+              _recentDetections.clear();
+            }
+          } else {
+            _outputLabel = "Menunggu stabilitas...";
+            _confidence = confStr;
           }
         } else {
           _outputLabel = "Tunggu Deteksi...";
           _confidence = "";
+          if (_recentDetections.isNotEmpty) _recentDetections.clear();
         }
       });
     }
   }
 
-  // --- 3. EKSTRAKSI KEYPOINT (63 Features) ---
+  // --- 4. EKSTRAKSI KEYPOINT (FIXED VERSION) ✅ ---
   List<double> _extractKeypoints(List<Hand> hands) {
     if (hands.isNotEmpty) {
       final hand = hands.first;
       List<double> keypoints = [];
 
       for (final landmark in hand.landmarks) {
-        keypoints.add(landmark.x);
-        keypoints.add(landmark.y);
-        keypoints.add(landmark.z);
+        double x = landmark.x;
+        double y = landmark.y;
+        double z = landmark.z;
+
+        // ✅ CRITICAL FIX: SELALU mirror X (konsisten dengan training)
+        // Notebook menggunakan cv2.flip(frame, 1) untuk SEMUA data
+        x = 1.0 - x;
+
+        // ✅ PERBAIKAN: JANGAN clamp, biarkan nilai natural
+        // Mediapipe sudah normalisasi otomatis ke [0,1]
+        // Clamp bisa hilangkan informasi penting
+
+        // Safety check untuk NaN/Inf saja
+        if (x.isNaN || x.isInfinite) x = 0.0;
+        if (y.isNaN || y.isInfinite) y = 0.0;
+        if (z.isNaN || z.isInfinite) z = 0.0;
+
+        keypoints.add(x);
+        keypoints.add(y);
+        keypoints.add(z);
       }
 
       if (keypoints.length >= KEYPOINT_VECTOR_SIZE) {
@@ -306,7 +353,7 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  // --- 4. STREAM CONTROL ---
+  // --- 5. STREAM CONTROL ---
   void _startImageStream() {
     if (_controller == null || !_controller!.value.isInitialized) return;
     if (!_controller!.value.isStreamingImages) {
@@ -343,7 +390,7 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  // --- 5. WIDGET BUILDER ---
+  // --- 6. WIDGET BUILDER GIF VIEW ---
   Widget _buildGifResultView() {
     return Container(
       width: double.infinity,
@@ -360,7 +407,6 @@ class _CameraPageState extends State<CameraPage> {
             style: bodyText.copyWith(fontWeight: bold, color: accentColor),
           ),
           const SizedBox(height: 20),
-
           SizedBox(
             height: 200,
             child: ListView.builder(
@@ -439,6 +485,7 @@ class _CameraPageState extends State<CameraPage> {
     );
   }
 
+  // --- 7. WIDGET BUILDER CAMERA VIEW ---
   Widget _buildCameraView() {
     if (!isCameraAvailable) {
       return Center(
@@ -499,7 +546,7 @@ class _CameraPageState extends State<CameraPage> {
     );
   }
 
-  // --- 6. BUILD METHOD ---
+  // --- 8. BUILD METHOD UTAMA ---
   @override
   Widget build(BuildContext context) {
     final sw = screenWidth(context);
@@ -540,6 +587,7 @@ class _CameraPageState extends State<CameraPage> {
                             : _buildCameraView(),
                       ),
 
+                      // Tombol Flip Camera
                       if (!_showGifView &&
                           isCameraAvailable &&
                           _isInitialized &&
@@ -559,6 +607,7 @@ class _CameraPageState extends State<CameraPage> {
                                 _isInitialized = false;
                                 _currentHands.clear();
                                 _sequenceBuffer.clear();
+                                _recentDetections.clear();
                               });
                               _initialize();
                             },
@@ -573,6 +622,7 @@ class _CameraPageState extends State<CameraPage> {
                           ),
                         ),
 
+                      // Tombol Close (Mode Translate)
                       if (_showGifView)
                         Positioned(
                           top: 10,
@@ -590,6 +640,7 @@ class _CameraPageState extends State<CameraPage> {
                           ),
                         ),
 
+                      // Label Deteksi di Bawah
                       if (!_showGifView &&
                           !_isUserTyping &&
                           _outputLabel.isNotEmpty)
@@ -760,42 +811,55 @@ class _CameraPageState extends State<CameraPage> {
   }
 }
 
-// --- Custom Painter Class untuk Visualisasi Landmark Tangan ---
-
+// --- CUSTOM PAINTER UNTUK VISUALISASI LANDMARK ---
 class LandmarkPainter extends CustomPainter {
   LandmarkPainter({
-    required this.hands, 
+    required this.hands,
     required this.previewSize,
     required this.lensDirection,
     required this.sensorOrientation,
   });
 
-  final List<Hand> hands; 
+  final List<Hand> hands;
   final Size previewSize;
   final CameraLensDirection lensDirection;
   final int sensorOrientation;
 
-  // Daftar koneksi untuk 21 Hand Landmarks
   static const List<List<int>> connections = [
-    [0, 1], [1, 2], [2, 3], [3, 4], 
-    [0, 5], [5, 6], [6, 7], [7, 8], 
-    [5, 9], [9, 10], [10, 11], [11, 12], 
-    [9, 13], [13, 14], [14, 15], [15, 16], 
-    [13, 17], [0, 17], [17, 18], [18, 19], [19, 20], 
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [0, 5],
+    [5, 6],
+    [6, 7],
+    [7, 8],
+    [5, 9],
+    [9, 10],
+    [10, 11],
+    [11, 12],
+    [9, 13],
+    [13, 14],
+    [14, 15],
+    [15, 16],
+    [13, 17],
+    [0, 17],
+    [17, 18],
+    [18, 19],
+    [19, 20],
   ];
 
   @override
   void paint(Canvas canvas, Size size) {
     if (hands.isEmpty) return;
-    
-    // 1. Tentukan Skala (Menggunakan skala terkecil dari rasio lebar/tinggi)
+
     final double scaleX = size.width / previewSize.height;
-    final double scaleY = size.height / previewSize.width; 
+    final double scaleY = size.height / previewSize.width;
     final double minScale = math.min(scaleX, scaleY);
-    
+
     final pointPaint = Paint()
       ..color = Colors.red.shade700
-      ..strokeWidth = 10 / minScale 
+      ..strokeWidth = 10 / minScale
       ..strokeCap = StrokeCap.round;
 
     final linePaint = Paint()
@@ -803,68 +867,49 @@ class LandmarkPainter extends CustomPainter {
       ..strokeWidth = 4 / minScale;
 
     canvas.save();
-    
-    // 2. Terapkan Transformasi Kanvas (Rotasi dan Mirroring)
-    final double radians = 90 * math.pi / 180; // Sudut 90 derajat ke kanan (searah jarum jam)
-    
+
+    final double radians = 90 * math.pi / 180;
     final center = Offset(size.width / 2, size.height / 2);
     canvas.translate(center.dx, center.dy);
-    
-    // >>> PENAMBAHAN ROTASI 90 DERAJAT KE KANAN <<<
-    // Rotasi dilakukan di tengah kanvas
-    canvas.rotate(radians); 
-
-    // Mirroring untuk Kamera Depan (Setelah Rotasi)
+    canvas.rotate(radians);
     if (lensDirection == CameraLensDirection.front) {
       canvas.scale(-1, 1);
     }
-    
-    // Kembalikan ke posisi awal
     canvas.translate(-center.dx, -center.dy);
 
-    
-    // 3. Hitung Dimensi Pemetaan yang Benar
-    // Karena kita sudah memutar kanvas 90 derajat, dimensi pemetaan harus disesuaikan.
-    // Jika kita memutar 90 derajat, X (horizontal) menjadi Y (vertikal), dan Y menjadi X.
-    
-    // Dimensi Preview yang diputar
-    // Kita harus menggunakan dimensi widget (size) karena transformasi kanvas sudah memutarnya.
     final double logicalWidth = size.width;
     final double logicalHeight = size.height;
 
-
     for (final hand in hands) {
       final landmarks = hand.landmarks;
-      
-      // Menggambar Koneksi dan Landmark
+
       for (final connection in connections) {
-          final start = landmarks[connection[0]]; 
-          final end = landmarks[connection[1]];
+        final start = landmarks[connection[0]];
+        final end = landmarks[connection[1]];
 
-          // Koordinat harus dikalikan dengan skala dan dimensi logis
-          final startPoint = Offset(
-            start.x * logicalWidth * minScale, 
-            start.y * logicalHeight * minScale,
-          );
+        final startPoint = Offset(
+          start.x * logicalWidth * minScale,
+          start.y * logicalHeight * minScale,
+        );
 
-          final endPoint = Offset(
-            end.x * logicalWidth * minScale,
-            end.y * logicalHeight * minScale,
-          );
-          
-          canvas.drawLine(startPoint, endPoint, linePaint);
+        final endPoint = Offset(
+          end.x * logicalWidth * minScale,
+          end.y * logicalHeight * minScale,
+        );
+
+        canvas.drawLine(startPoint, endPoint, linePaint);
       }
 
       for (final landmark in landmarks) {
         final point = Offset(
-          landmark.x * logicalWidth * minScale, 
+          landmark.x * logicalWidth * minScale,
           landmark.y * logicalHeight * minScale,
         );
-        
+
         canvas.drawCircle(point, 5 / minScale, pointPaint);
       }
     }
-    
+
     canvas.restore();
   }
 

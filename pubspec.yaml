@@ -1,12 +1,13 @@
 name: gestura
 description: "Application to translate Sign Language."
-publish_to: 'none'
+publish_to: "none"
 version: 0.1.0
 
 environment:
   sdk: ^3.9.2
 
 dependencies:
+  permission_handler: ^11.0.0
   cloud_firestore: ^6.1.0
   firebase_auth: ^6.1.2
   firebase_core: ^4.2.1
@@ -23,7 +24,6 @@ dependencies:
   google_mlkit_pose_detection: ^0.14.0
   google_mlkit_commons: ^0.11.0
   hand_landmarker: ^2.1.2
-  
 
 dev_dependencies:
   flutter_test:
@@ -33,7 +33,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-  - assets/images/
-  - assets/icons/
-  - assets/models/
-  - assets/bisindo/
+    - assets/images/
+    - assets/icons/
+    - assets/models/
+    - assets/bisindo/
