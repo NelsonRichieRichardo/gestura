@@ -8,8 +8,7 @@ import 'package:gestura/pages/camera.dart';
 import 'package:gestura/pages/exercise.dart'; 
 import 'package:gestura/pages/settings.dart'; 
 import 'package:gestura/pages/profile.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // --- DATA MODEL UNTUK HISTORY (GLOBAL) ---
 enum HistoryType { translation, learning, quiz }
@@ -34,54 +33,8 @@ class HistoryItem {
   });
 }
 
-// Data Dummy History
-final List<HistoryItem> dummyHistory = [
-  HistoryItem(
-    title: "Translated 'HELLO'",
-    subtitle: "Camera Mode",
-    time: "Just now",
-    icon: Icons.translate_rounded,
-    color: Colors.green,
-    type: HistoryType.translation,
-    detailPayload: "HELLO"
-  ),
-  HistoryItem(
-    title: "Learned Alphabet A-E",
-    subtitle: "Dictionary",
-    time: "2 hours ago",
-    icon: Icons.school_rounded,
-    color: Colors.purple,
-    type: HistoryType.learning,
-    detailPayload: "A, B, C, D, E"
-  ),
-  HistoryItem(
-    title: "Daily Quiz",
-    subtitle: "Score: 80/100",
-    time: "Yesterday",
-    icon: Icons.emoji_events_rounded,
-    color: Colors.amber,
-    type: HistoryType.quiz,
-    detailPayload: "80"
-  ),
-  HistoryItem(
-    title: "Translated 'THANKS'",
-    subtitle: "Camera Mode",
-    time: "Yesterday",
-    icon: Icons.translate_rounded,
-    color: Colors.green,
-    type: HistoryType.translation,
-    detailPayload: "THANKS"
-  ),
-  HistoryItem(
-    title: "Learned Greetings",
-    subtitle: "Dictionary",
-    time: "2 days ago",
-    icon: Icons.school_rounded,
-    color: Colors.purple,
-    type: HistoryType.learning,
-    detailPayload: "Greetings: Thank you, Welcome"
-  ),
-];
+// Data Global History (akan diisi dari Supabase)
+List<HistoryItem> globalHistory = [];
 
 // --- WIDGET HELPER GLOBAL: History List Tile ---
 // Digunakan di HomeContent dan HistoryPage
@@ -146,24 +99,72 @@ class _HomePageState extends State<HomePage> {
                 _welcomeNotificationShown = true; 
             }
             _fetchUsername(); 
+            _fetchHistory();
         });
+    }
+
+    void _fetchHistory() async {
+        try {
+            final supabase = Supabase.instance.client;
+            final session = supabase.auth.currentSession;
+            if (session == null) return;
+            
+            final response = await supabase
+                .from('history_items')
+                .select()
+                .eq('user_id', session.user.id)
+                .order('created_at', ascending: false);
+            
+            List<HistoryItem> loaded = [];
+            for (var item in response) {
+                HistoryType hType = HistoryType.translation;
+                if (item['item_type'] == 'learning') hType = HistoryType.learning;
+                if (item['item_type'] == 'quiz') hType = HistoryType.quiz;
+                
+                loaded.add(HistoryItem(
+                    title: item['title'],
+                    subtitle: item['subtitle'],
+                    time: item['time_label'],
+                    icon: Icons.history, // placeholder
+                    color: Color(int.parse(item['color_hex'])),
+                    type: hType,
+                    detailPayload: item['detail_payload']
+                ));
+            }
+            if (mounted) {
+                setState(() {
+                    globalHistory = loaded;
+                });
+            }
+        } catch (e) {
+            print("Error fetching history: $e");
+        }
     }
     
     void _fetchUsername() async {
-        User? user = FirebaseAuth.instance.currentUser;
-        if (user == null) return;
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session == null) return;
         
         try {
-            DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+            final response = await Supabase.instance.client
+                .from('users')
+                .select('username')
+                .eq('id', session.user.id)
+                .maybeSingle();
             
-            if (doc.exists && mounted) {
-                String fetchedUsername = (doc.data() as Map<String, dynamic>)['username'] ?? 'User';
-                
-                if (fetchedUsername != _currentUsername) {
-                    setState(() {
-                        _currentUsername = fetchedUsername;
-                    });
+            if (mounted) {
+                String fetchedUsername = 'User';
+                if (response != null && response['username'] != null) {
+                    fetchedUsername = response['username'];
+                } else if (session.user.userMetadata != null && session.user.userMetadata!['username'] != null) {
+                    fetchedUsername = session.user.userMetadata!['username'];
+                } else if (session.user.email != null) {
+                    fetchedUsername = session.user.email!.split('@')[0];
                 }
+
+                setState(() {
+                    _currentUsername = fetchedUsername;
+                });
                 
                 if (!_welcomeNotificationShown) {
                     _showWelcomeNotification(context, _currentUsername);
@@ -197,7 +198,7 @@ class _HomePageState extends State<HomePage> {
 
     void _handleLogout() async {
         LoadingOverlay.show(context);
-        await FirebaseAuth.instance.signOut(); 
+        await Supabase.instance.client.auth.signOut(); 
         await Future.delayed(const Duration(milliseconds: 500)); 
 
         if (mounted) LoadingOverlay.hide(context);
@@ -228,7 +229,10 @@ class _HomePageState extends State<HomePage> {
         setState(() {
             _selectedIndex = index;
         });
-        if (index == 0) _fetchUsername();
+        if (index == 0) {
+            _fetchUsername();
+            _fetchHistory();
+        }
     }
     
     void _navigateToCamera() {
@@ -248,7 +252,7 @@ class _HomePageState extends State<HomePage> {
                 onNavigateProfile: _navigateToProfilePage, 
             ), 
             const DictionaryPage(),
-            const CameraPage(),
+            CameraPage(isActive: _selectedIndex == 2),
             const ExercisePage(),
             const SettingsPage(),
         ];
@@ -570,7 +574,7 @@ class HomeContent extends StatelessWidget {
 
                     // LIST HISTORY (3 ITEM PERTAMA)
                     Column(
-                        children: dummyHistory.take(3).map((item) {
+                        children: globalHistory.take(3).map((item) {
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: buildHistoryTile(
@@ -633,9 +637,9 @@ class _HistoryPageState extends State<HistoryPage> {
   // LOGIKA FILTERING HISTORY
   List<HistoryItem> get _filteredHistory {
     if (_selectedFilter == 'All') {
-      return dummyHistory;
+      return globalHistory;
     }
-    return dummyHistory.where((item) {
+    return globalHistory.where((item) {
       if (_selectedFilter == 'Translation') return item.type == HistoryType.translation;
       if (_selectedFilter == 'Learning') return item.type == HistoryType.learning;
       if (_selectedFilter == 'Quiz') return item.type == HistoryType.quiz;

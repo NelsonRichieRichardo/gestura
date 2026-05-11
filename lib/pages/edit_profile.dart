@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gestura/core/themes/app_theme.dart';
 import 'package:gestura/components/loading_overlay.dart'; 
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gestura/pages/login.dart'; 
 // import 'package:gestura/pages/onboarding.dart'; // Tidak diperlukan jika navigasi root adalah LoginPage
 
@@ -98,7 +97,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     @override
     void initState() {
         super.initState();
-        _currentUser = FirebaseAuth.instance.currentUser;
+        _currentUser = Supabase.instance.client.auth.currentUser;
         if (_currentUser != null) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
                 _fetchUserData();
@@ -124,20 +123,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
         LoadingOverlay.show(context);
 
         try {
-            DocumentSnapshot userDoc = await FirebaseFirestore.instance
-                .collection('users')
-                .doc(_currentUser!.uid)
-                .get();
+            final response = await Supabase.instance.client
+                .from('users')
+                .select('username')
+                .eq('id', _currentUser!.id)
+                .maybeSingle();
 
-            if (userDoc.exists && mounted) {
-                Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
-                
-                _initialUsername = data['username'] ?? '';
-                _initialPhone = data['phoneNumber']?.replaceAll('+', '') ?? '';
+            if (mounted) {
+                _initialUsername = response?['username'] ?? _currentUser!.userMetadata?['username'] ?? '';
+                _initialPhone = _currentUser!.userMetadata?['phone_number']?.replaceAll('+', '') ?? '';
                 
                 setState(() {
                     _usernameController.text = _initialUsername;
-                    _emailController.text = _currentUser!.email ?? data['email'] ?? '';
+                    _emailController.text = _currentUser!.email ?? '';
                     _phoneController.text = _initialPhone; 
                     _isInitializing = false;
                 });
@@ -162,23 +160,30 @@ class _EditProfilePageState extends State<EditProfilePage> {
         final newPassword = _passwordController.text; 
 
         try {
-            // 1. Update Firestore (Username & Phone)
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(_currentUser!.uid)
-                .update({
+            // 1. Upsert public.users (Username) agar jika belum ada, otomatis terbuat
+            await Supabase.instance.client
+                .from('users')
+                .upsert({
+                    'id': _currentUser!.id,
                     'username': newUsername,
-                    'phoneNumber': newPhone,
                 });
 
-            // 2. Update Auth (Password)
+            // 2. Update Auth (Password, Phone, meta)
+            UserAttributes attributes = UserAttributes(
+                data: {
+                    'username': newUsername,
+                    'phone_number': newPhone,
+                }
+            );
+
             if (passwordChanged) {
                 if (newPassword.length < 6) {
-                    throw FirebaseAuthException(code: 'weak-password', message: "Password minimal 6 karakter.");
+                    throw AuthException("Password minimal 6 karakter.");
                 }
-                
-                await _currentUser!.updatePassword(newPassword);
+                attributes.password = newPassword;
             }
+            
+            await Supabase.instance.client.auth.updateUser(attributes);
 
             // 3. SUKSES & NAVIGASI
             if (mounted) {
@@ -199,7 +204,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 
                 if (passwordChanged) {
                     // KASUS 1: PASSWORD BERUBAH (HARUS LOGOUT TOTAL)
-                    await FirebaseAuth.instance.signOut(); 
+                    await Supabase.instance.client.auth.signOut(); 
                     
                     // NAVIGASI KE LOGIN.DART (target root)
                     Navigator.pushAndRemoveUntil(
@@ -214,10 +219,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 }
             }
 
-        } on FirebaseAuthException catch (e) {
-            String errorMessage = (e.code == 'requires-recent-login') 
-                                  ? "Mohon login ulang untuk mengubah password." 
-                                  : "Gagal: ${e.message}";
+        } on AuthException catch (e) {
+            String errorMessage = "Gagal: ${e.message}";
             if (mounted) {
                 LoadingOverlay.hide(context);
                 ScaffoldMessenger.of(context).showSnackBar(

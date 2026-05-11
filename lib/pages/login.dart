@@ -1,8 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Tambahkan imports untuk Social Login
 import 'package:google_sign_in/google_sign_in.dart';
@@ -162,7 +161,7 @@ class _LoginPageState extends State<LoginPage> {
     LoadingOverlay.show(context);
     
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
 
       if (!mounted) return;
       LoadingOverlay.hide(context);
@@ -175,20 +174,11 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
       _resetEmailController.clear();
-    } on FirebaseAuthException catch (e) {
+    } on AuthException catch (e) {
       if (!mounted) return;
       LoadingOverlay.hide(context);
       
-      String message = "Gagal mengirim tautan reset.";
-      
-      if (e.code == 'invalid-email') {
-        message = 'Format email tidak valid.';
-      } else if (e.code == 'user-not-found' || e.code == 'missing-email') {
-          // Pesan umum untuk keamanan, tidak memberi tahu apakah email benar-benar ada
-          message = 'Jika email terdaftar, tautan reset telah dikirim. Cek inbox Anda.'; 
-      } else {
-        message = 'Terjadi kesalahan: ${e.message}';
-      }
+      String message = "Gagal mengirim tautan reset: ${e.message}";
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: dangerColor), 
@@ -205,18 +195,21 @@ class _LoginPageState extends State<LoginPage> {
   // --- FUNGSI BANTU UNTUK NAVIGASI SETELAH LOGIN BERHASIL ---
 
   Future<void> _navigateToHome(String uid) async {
-    // Simulasi pengambilan data username
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
-
+    // Pengambilan data username dari Supabase public.users
     String username = "Mate";
 
-    if (userDoc.exists && userDoc.data() != null) {
-      final data = userDoc.data() as Map<String, dynamic>;
-      // Asumsi field username ada di Firestore
-      username = data['username'] ?? "Mate"; 
+    try {
+      final response = await Supabase.instance.client
+          .from('users')
+          .select('username')
+          .eq('id', uid)
+          .maybeSingle();
+
+      if (response != null && response['username'] != null) {
+        username = response['username'];
+      }
+    } catch (e) {
+      debugPrint("Error fetching user data: $e");
     }
 
     if (!mounted) return;
@@ -243,36 +236,26 @@ class _LoginPageState extends State<LoginPage> {
     LoadingOverlay.show(context);
 
     try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
+      final AuthResponse res = await Supabase.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
       // Simpan Password jika login berhasil dan checkbox dicentang
       await _saveUserCredentials();
 
-      String uid = userCredential.user!.uid;
+      if (res.user != null) {
+        String uid = res.user!.id;
+        await _navigateToHome(uid);
+      } else {
+        throw Exception("Login failed: Unknown error");
+      }
 
-      await _navigateToHome(uid);
-
-    } on FirebaseAuthException catch (e) {
+    } on AuthException catch (e) {
       if (mounted) {
         LoadingOverlay.hide(context);
-        String message = "Login failed";
-
-        if (e.code == 'user-not-found') {
-          message = 'No user found for that email.';
-        } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-          message = 'Invalid email or password.';
-        } else if (e.code == 'invalid-email') {
-          message = 'The email address is not valid.';
-        } else {
-           message = 'Login failed: ${e.message}';
-        }
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: dangerColor),
+          SnackBar(content: Text('Login failed: ${e.message}'), backgroundColor: dangerColor),
         );
       }
     } catch (e) {
@@ -293,8 +276,16 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _handleGoogleLogin() async {
     LoadingOverlay.show(context);
     try {
+      /// Web Client ID that you registered with Google Cloud.
+      const webClientId = 'YOUR_GOOGLE_WEB_CLIENT_ID'; // Ganti dengan Client ID web Anda
+      /// IOS Client ID that you registered with Google Cloud.
+      // const iosClientId = 'YOUR_GOOGLE_IOS_CLIENT_ID'; // Uncomment jika perlu
+
       // 1. Pemicu alur autentikasi.
-      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        serverClientId: webClientId,
+        // clientId: iosClientId,
+      );
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) {
@@ -306,18 +297,27 @@ class _LoginPageState extends State<LoginPage> {
 
       // 2. Minta kredensial.
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+      final accessToken = googleAuth.accessToken;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw 'No ID Token found.';
+      }
+
+      // 3. Masuk ke Supabase dengan idToken.
+      final AuthResponse res = await Supabase.instance.client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
       );
 
-      // 3. Masuk ke Firebase dengan kredensial.
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-
       // Lanjutkan ke navigasi
-      await _navigateToHome(userCredential.user!.uid);
-    } on FirebaseAuthException catch (e) {
+      if (res.user != null) {
+        await _navigateToHome(res.user!.id);
+      } else {
+        throw Exception("Supabase Google Login returned null user");
+      }
+    } on AuthException catch (e) {
       if (!mounted) return;
       LoadingOverlay.hide(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -343,47 +343,13 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _handleFacebookLogin() async {
     LoadingOverlay.show(context);
     try {
-      // 1. Pemicu alur login Facebook.
-      final LoginResult result = await FacebookAuth.instance.login(
-        // Tambahkan permissions yang dibutuhkan, termasuk email
-        permissions: ['email', 'public_profile'],
+      // Supabase OAuth Login for Facebook
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.facebook,
       );
-
-      if (result.status == LoginStatus.success) {
-        // 2. Dapatkan Access Token.
-        final AccessToken accessToken = result.accessToken!;
-
-        // 3. Buat kredensial Firebase dari token Facebook.
-        final AuthCredential credential =
-            FacebookAuthProvider.credential(accessToken.token);
-
-        // 4. Masuk ke Firebase dengan kredensial.
-        final UserCredential userCredential =
-            await FirebaseAuth.instance.signInWithCredential(credential);
-
-        // Lanjutkan ke navigasi
-        await _navigateToHome(userCredential.user!.uid);
-      } else if (result.status == LoginStatus.cancelled) {
-        if (!mounted) return;
-        LoadingOverlay.hide(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Facebook login dibatalkan.'),
-            backgroundColor: dangerColor,
-          ),
-        );
-      } else {
-        if (!mounted) return;
-        LoadingOverlay.hide(context);
-        // Tangani error seperti 'permission denied', 'network error', dll.
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Facebook login gagal: ${result.message ?? "Unknown error"}'),
-            backgroundColor: dangerColor,
-          ),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
+      // Note: Browser will open for OAuth. Upon success, main.dart's auth state listener will handle navigation.
+      if (mounted) LoadingOverlay.hide(context);
+    } on AuthException catch (e) {
       if (!mounted) return;
       LoadingOverlay.hide(context);
       ScaffoldMessenger.of(context).showSnackBar(
