@@ -159,7 +159,7 @@ class _ExercisePageState extends State<ExercisePage> with SingleTickerProviderSt
             'level_id': currentLevel['id'],
             'status': 'completed',
             'stars': stars,
-        });
+        }, onConflict: 'user_id,level_id');
 
         // 3. Update stats via RPC
         int earnedDiamonds = stars * 10;

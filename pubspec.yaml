@@ -39,6 +39,7 @@ flutter:
     - assets/icons/
     - assets/models/
     - assets/bisindo/
+    - assets/adi-registration.properties
 
 flutter_launcher_icons:
   android: "true"
