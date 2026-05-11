@@ -157,7 +157,7 @@ class _CameraPageState extends State<CameraPage> {
     _plugin = HandLandmarkerPlugin.create(
       numHands: 1,
       minHandDetectionConfidence: 0.5,
-      delegate: HandLandmarkerDelegate.CPU, // MENGGUNAKAN CPU AGAR TIDAK CRASH DI HP XIAOMI
+      delegate: HandLandmarkerDelegate.cpu, // MENGGUNAKAN CPU AGAR TIDAK CRASH DI HP XIAOMI
     );
 
     _initializeControllerFuture = _controller!

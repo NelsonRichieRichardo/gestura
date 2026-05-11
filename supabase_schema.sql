@@ -169,7 +169,7 @@ INSERT INTO public.exercise_levels (id, unit_id, title, icon_name) VALUES
 -- 4. Create User Level Progress Table (For saving progress per user)
 CREATE TABLE public.user_level_progress (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id TEXT NOT NULL, -- Firebase UID or Supabase Auth UID
+    user_id TEXT NOT NULL, -- Supabase Auth UID
     level_id INTEGER REFERENCES public.exercise_levels(id) ON DELETE CASCADE,
     status TEXT DEFAULT 'locked', -- 'locked', 'current', 'completed'
     stars INTEGER DEFAULT 0,
@@ -194,7 +194,7 @@ CREATE POLICY "Enable all access for all users for testing" ON public.user_level
 -- 5. Create History Items Table
 CREATE TABLE public.history_items (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id TEXT NOT NULL, -- Firebase UID or Supabase Auth UID
+    user_id TEXT NOT NULL, -- Supabase Auth UID
     title TEXT NOT NULL,
     subtitle TEXT NOT NULL,
     time_label TEXT NOT NULL,

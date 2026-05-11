@@ -26,7 +26,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // ======================================================
-  // LOGIKA PENGAMBILAN DATA DARI FIREBASE
+  // LOGIKA PENGAMBILAN DATA DARI SUPABASE
   // ======================================================
 
   void _fetchUserData() async {
