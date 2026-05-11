@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dictionary_detail_page.dart'; 
 
 class DictionaryPage extends StatefulWidget {
@@ -19,45 +20,60 @@ class _DictionaryPageState extends State<DictionaryPage> {
   final ScrollController _scrollController = ScrollController(); 
 
   // --- DATA SUMBER ---
-  
-  // 1. Generate Huruf A-Z secara otomatis
-  final List<Map<String, String>> dataHuruf = List.generate(26, (index) {
-    String letter = String.fromCharCode(65 + index); // 65 adalah kode ASCII 'A'
-    return {
-      "sign": letter,
-      "description": "Isyarat tangan untuk huruf $letter"
-    };
-  });
+  List<Map<String, dynamic>> dataDictionary = [];
+  bool isLoading = true;
 
-  // 2. Kumpulan Kata
-  final List<Map<String, String>> dataKata = [
-    {"sign": "Halo", "description": "Sapaan umum untuk menyapa seseorang"},
-    {"sign": "Teman", "description": "Seseorang yang dikenal dan dipercaya"},
-    {"sign": "Saya", "description": "Menunjuk pada diri sendiri"},
-    {"sign": "Makan", "description": "Kegiatan memasukkan makanan ke mulut"},
-    {"sign": "Minum", "description": "Kegiatan memasukkan minuman ke mulut"},
-    {"sign": "Keluarga", "description": "Sekumpulan orang yang terikat darah/perkawinan"},
-    {"sign": "Ibu", "description": "Orang tua perempuan"},
-    {"sign": "Ayah", "description": "Orang tua laki-laki"},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
 
-  // 3. Kumpulan Kalimat
-  final List<Map<String, String>> dataKalimat = [
-    {"sign": "Aku Cinta Kamu", "description": "Ungkapan kasih sayang (I Love You) 🤟"},
-    {"sign": "Apa Kabar?", "description": "Bertanya tentang kondisi seseorang"},
-    {"sign": "Sampai Jumpa", "description": "Salam perpisahan"},
-  ];
+  Future<void> _fetchData() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase.from('dictionary_items').select().order('sign', ascending: true);
+      if (mounted) {
+        setState(() {
+          dataDictionary = List<Map<String, dynamic>>.from(response);
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error fetching dictionary data: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _saveToHistory(String sign) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final session = supabase.auth.currentSession;
+      if (session == null) return;
+      
+      await supabase.from('history_items').insert({
+        'user_id': session.user.id,
+        'title': 'Learned \'$sign\'',
+        'subtitle': 'Dictionary - $selectedCategory',
+        'time_label': 'Just now',
+        'icon_name': 'school_rounded',
+        'color_hex': '0xFF9C27B0',
+        'item_type': 'learning',
+        'detail_payload': sign
+      });
+    } catch (e) {
+      print('Error saving history: $e');
+    }
+  }
 
   // Fungsi untuk mendapatkan list yang ditampilkan berdasarkan kategori & pencarian
-  List<Map<String, String>> getFilteredData() {
-    List<Map<String, String>> activeList;
-
-    switch (selectedCategory) {
-      case "Kata": activeList = dataKata; break;
-      case "Kalimat": activeList = dataKalimat; break;
-      case "Huruf":
-      default: activeList = dataHuruf; break;
-    }
+  List<Map<String, dynamic>> getFilteredData() {
+    List<Map<String, dynamic>> activeList = dataDictionary.where((item) => item['category'] == selectedCategory).toList();
 
     // Filter berdasarkan search query
     if (searchQuery.isNotEmpty) {
@@ -130,7 +146,16 @@ class _DictionaryPageState extends State<DictionaryPage> {
             ),
             
             // SLIVER 2: KONTEN DINAMIS (GRID atau LIST)
-            if (filteredList.isEmpty)
+            if (isLoading)
+              SliverToBoxAdapter(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 50.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+              )
+            else if (filteredList.isEmpty)
               SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -268,6 +293,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
     
     return GestureDetector(
       onTap: () {
+        _saveToHistory(sign);
         // Navigasi ke Halaman Detail
         Navigator.push(
           context,
@@ -330,6 +356,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
   Widget _buildDictionaryItem(BuildContext context, String sign, String description) {
     return GestureDetector(
       onTap: () {
+        _saveToHistory(sign);
         Navigator.push(
           context,
           MaterialPageRoute(

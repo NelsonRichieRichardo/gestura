@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gestura/core/themes/app_theme.dart'; 
 import 'package:gestura/pages/edit_profile.dart'; 
 import 'package:gestura/components/loading_overlay.dart'; 
-import 'package:firebase_auth/firebase_auth.dart'; 
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:supabase_flutter/supabase_flutter.dart'; 
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -35,21 +34,23 @@ class _ProfilePageState extends State<ProfilePage> {
     LoadingOverlay.show(context);
     
     try {
-      User? currentUser = FirebaseAuth.instance.currentUser;
+      final session = Supabase.instance.client.auth.currentSession;
       
-      if (currentUser != null) {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
+      if (session != null) {
+        final user = session.user;
+        
+        final response = await Supabase.instance.client
+            .from('users')
+            .select('username')
+            .eq('id', user.id)
+            .maybeSingle();
 
-        if (userDoc.exists && mounted) {
-          Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
-          
+        if (mounted) {
           setState(() {
-            username = data['username'] ?? 'N/A';
-            email = data['email'] ?? currentUser.email ?? 'N/A';
-            phone = data['phoneNumber'] ?? 'N/A'; 
+            // Priority: public.users table -> userMetadata -> Guest
+            username = response?['username'] ?? user.userMetadata?['username'] ?? 'N/A';
+            email = user.email ?? 'N/A';
+            phone = user.userMetadata?['phone_number'] ?? 'N/A';
             _isDataLoaded = true;
           });
         }
@@ -62,7 +63,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     } catch (e) {
       if (mounted) {
-        print("Error fetching Firestore data: $e");
+        print("Error fetching Supabase data: $e");
         ScaffoldMessenger.of(context).showSnackBar(
            const SnackBar(content: Text("Failed to load profile data.")),
         );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'exercise_play_page.dart'; 
 
 class ExercisePage extends StatefulWidget {
@@ -12,121 +13,13 @@ class ExercisePage extends StatefulWidget {
 
 class _ExercisePageState extends State<ExercisePage> with SingleTickerProviderStateMixin {
   // --- DATA STRUKTUR (10 UNIT BARU) ---
-  List<Map<String, dynamic>> units = [
-    {
-      "unitTitle": "Unit 1: The Basics",
-      "unitDesc": "Core Alphabet & Numbers 1-10",
-      "color": Colors.blue,
-      "isExpanded": true,
-      "levels": [
-        {"id": 1, "title": "Core Alphabet", "icon": Icons.back_hand, "status": "completed", "stars": 3},
-        {"id": 2, "title": "Numbers 1-10", "icon": Icons.translate, "status": "completed", "stars": 2},
-        {"id": 3, "title": "Simple Words", "icon": Icons.question_answer, "status": "current", "stars": 0},
-        {"id": 4, "title": "Unit Quiz", "icon": Icons.quiz, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 2: Introductions",
-      "unitDesc": "Greetings and Basic Phrases",
-      "color": Colors.green,
-      "isExpanded": false,
-      "levels": [
-        {"id": 5, "title": "Greetings", "icon": Icons.people, "status": "locked", "stars": 0},
-        {"id": 6, "title": "Self Introduction", "icon": Icons.emoji_people, "status": "locked", "stars": 0},
-        {"id": 7, "title": "Practice Sentences", "icon": Icons.record_voice_over, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 3: Daily Life",
-      "unitDesc": "Food, Drink, and Common Verbs",
-      "color": Colors.orange,
-      "isExpanded": false,
-      "levels": [
-        {"id": 8, "title": "Food & Drink", "icon": Icons.restaurant, "status": "locked", "stars": 0},
-        {"id": 9, "title": "Time & Schedule", "icon": Icons.schedule, "status": "locked", "stars": 0},
-        {"id": 10, "title": "Common Verbs", "icon": Icons.directions_run, "status": "locked", "stars": 0},
-        {"id": 11, "title": "Unit Quiz", "icon": Icons.quiz, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 4: Family & Home",
-      "unitDesc": "Relationships, Places, and Pronouns",
-      "color": Colors.indigo,
-      "isExpanded": false,
-      "levels": [
-        {"id": 12, "title": "Family Members", "icon": Icons.group, "status": "locked", "stars": 0},
-        {"id": 13, "title": "Rooms & Objects", "icon": Icons.home, "status": "locked", "stars": 0},
-        {"id": 14, "title": "Possessives", "icon": Icons.bookmark_added, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 5: Time & Date",
-      "unitDesc": "Days, Months, and Seasons",
-      "color": Colors.purple,
-      "isExpanded": false,
-      "levels": [
-        {"id": 15, "title": "Days of Week", "icon": Icons.calendar_today, "status": "locked", "stars": 0},
-        {"id": 16, "title": "Months & Year", "icon": Icons.calendar_month, "status": "locked", "stars": 0},
-        {"id": 17, "title": "Seasons & Weather", "icon": Icons.cloud, "status": "locked", "stars": 0},
-        {"id": 18, "title": "Unit Quiz", "icon": Icons.quiz, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 6: Feelings & Health",
-      "unitDesc": "Emotions, Descriptions, and Illness",
-      "color": Colors.pink,
-      "isExpanded": false,
-      "levels": [
-        {"id": 19, "title": "Basic Emotions", "icon": Icons.sentiment_satisfied, "status": "locked", "stars": 0},
-        {"id": 20, "title": "Describing People", "icon": Icons.face, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 7: Travel & Transport",
-      "unitDesc": "Directions, Locations, and Vehicles",
-      "color": Colors.brown,
-      "isExpanded": false,
-      "levels": [
-        {"id": 21, "title": "Directions", "icon": Icons.directions, "status": "locked", "stars": 0},
-        {"id": 22, "title": "Transportation Types", "icon": Icons.directions_bus, "status": "locked", "stars": 0},
-        {"id": 23, "title": "Asking for Location", "icon": Icons.location_on, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 8: Education & Work",
-      "unitDesc": "School Subjects and Occupations",
-      "color": Colors.cyan,
-      "isExpanded": false,
-      "levels": [
-        {"id": 24, "title": "School Subjects", "icon": Icons.book, "status": "locked", "stars": 0},
-        {"id": 25, "title": "Professions", "icon": Icons.business_center, "status": "locked", "stars": 0},
-        {"id": 26, "title": "Unit Quiz", "icon": Icons.quiz, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 9: Hobbies & Leisure",
-      "unitDesc": "Sports, Music, and Free Time Activities",
-      "color": Colors.lime[800]!,
-      "isExpanded": false,
-      "levels": [
-        {"id": 27, "title": "Sports", "icon": Icons.sports_soccer, "status": "locked", "stars": 0},
-        {"id": 28, "title": "Music & Arts", "icon": Icons.music_note, "status": "locked", "stars": 0},
-        {"id": 29, "title": "Free Time Activities", "icon": Icons.videogame_asset, "status": "locked", "stars": 0},
-      ]
-    },
-    {
-      "unitTitle": "Unit 10: Abstract Concepts",
-      "unitDesc": "Ideas, Opinions, and Complex Terms",
-      "color": Colors.red,
-      "isExpanded": false,
-      "levels": [
-        {"id": 30, "title": "Opinions", "icon": Icons.lightbulb, "status": "locked", "stars": 0},
-        {"id": 31, "title": "Abstract Ideas", "icon": Icons.psychology, "status": "locked", "stars": 0},
-        {"id": 32, "title": "Final Review", "icon": Icons.flag_rounded, "status": "locked", "stars": 0},
-        {"id": 33, "title": "Final Exam", "icon": Icons.quiz, "status": "locked", "stars": 0},
-      ]
-    },
-  ];
+  List<Map<String, dynamic>> units = [];
+  bool isLoading = true;
+  
+  // Stats
+  int fireStreak = 0;
+  int diamonds = 0;
+  int hearts = 5;
   
   late AnimationController _animationController;
 
@@ -137,6 +30,94 @@ class _ExercisePageState extends State<ExercisePage> with SingleTickerProviderSt
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final session = supabase.auth.currentSession;
+      final userId = session?.user.id;
+
+      // Fetch units
+      final unitsResponse = await supabase.from('exercise_units').select().order('id', ascending: true);
+      // Fetch levels
+      final levelsResponse = await supabase.from('exercise_levels').select().order('id', ascending: true);
+      
+      // Fetch user stats & progress
+      List<dynamic> progressResponse = [];
+      if (userId != null) {
+          progressResponse = await supabase.from('user_level_progress').select().eq('user_id', userId);
+          
+          final userStats = await supabase.from('users').select('fire_streak, diamonds, hearts').eq('id', userId).maybeSingle();
+          if (userStats != null) {
+              fireStreak = userStats['fire_streak'] ?? 0;
+              diamonds = userStats['diamonds'] ?? 0;
+              hearts = userStats['hearts'] ?? 5;
+          }
+      }
+
+      List<Map<String, dynamic>> loadedUnits = [];
+      bool foundCurrent = false;
+      
+      for (int i = 0; i < unitsResponse.length; i++) {
+        var unitData = unitsResponse[i];
+        
+        // Find levels for this unit
+        List<Map<String, dynamic>> unitLevels = levelsResponse
+            .where((level) => level['unit_id'] == unitData['id'])
+            .map((level) {
+                  // Find progress for this level
+                  int progIndex = progressResponse.indexWhere((p) => p['level_id'] == level['id']);
+                  var prog = progIndex != -1 ? progressResponse[progIndex] : null;
+                  String status = prog != null ? prog['status'] : 'locked';
+                  int stars = prog != null ? prog['stars'] : 0;
+
+                  return {
+                    "id": level['id'],
+                    "title": level['title'],
+                    "icon": Icons.star, 
+                    "status": status, 
+                    "stars": stars,
+                  };
+                })
+            .toList();
+            
+        // Initial state logic if no progress exists at all
+        if (!foundCurrent) {
+           bool hasCompleted = unitLevels.any((l) => l['status'] == 'completed');
+           if (!hasCompleted && unitLevels.isNotEmpty && unitLevels[0]['status'] == 'locked') {
+               unitLevels[0]['status'] = 'current';
+               foundCurrent = true;
+           } else if (unitLevels.any((l) => l['status'] == 'current')) {
+               foundCurrent = true;
+           }
+        }
+
+        loadedUnits.add({
+          "unitTitle": unitData['unit_title'],
+          "unitDesc": unitData['unit_desc'],
+          "color": Color(int.parse(unitData['color_hex'])),
+          "isExpanded": i == 0, // only first is expanded
+          "levels": unitLevels,
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          units = loadedUnits;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error fetching exercise data: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -152,20 +133,83 @@ class _ExercisePageState extends State<ExercisePage> with SingleTickerProviderSt
   }
 
   // --- HELPER: LOGIKA UPDATE BINTANG ---
-  void _handleLevelCompletion(int unitIndex, int levelIndex, int stars) {
-    setState(() {
-      // Update Level yang baru selesai
-      units[unitIndex]['levels'][levelIndex]['status'] = 'completed';
-      units[unitIndex]['levels'][levelIndex]['stars'] = stars;
+  void _handleLevelCompletion(int unitIndex, int levelIndex, int stars) async {
+    final supabase = Supabase.instance.client;
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return;
 
-      // Logika membuka level berikutnya
-      if (levelIndex + 1 < units[unitIndex]['levels'].length) {
-        units[unitIndex]['levels'][levelIndex + 1]['status'] = 'current';
-      } else if (unitIndex + 1 < units.length) {
-        // Jika unit selesai, buka level pertama unit baru
-        units[unitIndex + 1]['levels'][0]['status'] = 'current';
-      }
-    });
+    final currentLevel = units[unitIndex]['levels'][levelIndex];
+
+    try {
+        // 1. Pastikan profil user ada di public.users
+        final userProfile = await supabase.from('users').select().eq('id', userId).maybeSingle();
+        if (userProfile == null) {
+            await supabase.from('users').insert({
+                'id': userId,
+                'username': 'User', 
+                'fire_streak': 0,
+                'diamonds': 0,
+                'hearts': 5
+            });
+        }
+
+        // 2. Simpan level progress ke Supabase
+        await supabase.from('user_level_progress').upsert({
+            'user_id': userId,
+            'level_id': currentLevel['id'],
+            'status': 'completed',
+            'stars': stars,
+        }, onConflict: 'user_id,level_id');
+
+        // 3. Update stats via RPC
+        int earnedDiamonds = stars * 10;
+        await supabase.rpc('increment_user_stats', params: {
+            'u_id': userId,
+            'd_amount': earnedDiamonds,
+            's_amount': 1
+        });
+
+        // 4. Update UI Lokal (Optimistic UI)
+        setState(() {
+            currentLevel['status'] = 'completed';
+            currentLevel['stars'] = stars;
+            diamonds += earnedDiamonds;
+            fireStreak += 1;
+
+            if (levelIndex + 1 < units[unitIndex]['levels'].length) {
+                units[unitIndex]['levels'][levelIndex + 1]['status'] = 'current';
+            } else if (unitIndex + 1 < units.length) {
+                units[unitIndex + 1]['levels'][0]['status'] = 'current';
+            }
+        });
+
+        // 5. Tambah History Item
+        String hexColor = units[unitIndex]['color'].value.toRadixString(16).padLeft(8, '0');
+        await supabase.from('history_items').insert({
+            'user_id': userId,
+            'title': 'Selesai: ${currentLevel['title']}',
+            'subtitle': 'Skor: $stars Bintang (+ $earnedDiamonds Diamond)',
+            'time_label': 'Baru saja',
+            'icon_name': 'emoji_events_rounded',
+            'color_hex': '0x$hexColor',
+            'item_type': 'quiz',
+            'detail_payload': stars.toString()
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Progres berhasil disimpan! ✅"), backgroundColor: Colors.green)
+          );
+        }
+
+    } catch (e) {
+        print("Error saving progress: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Gagal simpan progres: $e"), backgroundColor: Colors.red)
+          );
+        }
+    }
   }
 
 
@@ -181,13 +225,17 @@ class _ExercisePageState extends State<ExercisePage> with SingleTickerProviderSt
             _buildHeader(context),
             
             Expanded(
-              child: ListView.builder(
-                padding: EdgeInsets.only(bottom: responsiveHeight(context, 0.05)),
-                itemCount: units.length,
-                itemBuilder: (context, unitIndex) {
-                  return _buildUnitSection(context, unitIndex);
-                },
-              ),
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : units.isEmpty
+                      ? Center(child: Text("No units available", style: GoogleFonts.poppins(color: Colors.grey)))
+                      : ListView.builder(
+                          padding: EdgeInsets.only(bottom: responsiveHeight(context, 0.05)),
+                          itemCount: units.length,
+                          itemBuilder: (context, unitIndex) {
+                            return _buildUnitSection(context, unitIndex);
+                          },
+                        ),
             ),
           ],
         ),
@@ -235,9 +283,9 @@ class _ExercisePageState extends State<ExercisePage> with SingleTickerProviderSt
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatChip(Icons.local_fire_department_rounded, "2", Colors.deepOrange),
-                _buildStatChip(Icons.diamond_rounded, "450", Colors.blueAccent),
-                _buildStatChip(Icons.favorite_rounded, "5", dangerColor),
+                _buildStatChip(Icons.local_fire_department_rounded, fireStreak.toString(), Colors.deepOrange),
+                _buildStatChip(Icons.diamond_rounded, diamonds.toString(), Colors.blueAccent),
+                _buildStatChip(Icons.favorite_rounded, hearts.toString(), dangerColor),
               ],
             ),
           ),

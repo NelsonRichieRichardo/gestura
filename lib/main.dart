@@ -2,8 +2,10 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'firebase_options.dart';
+import 'core/utils/supabase_config.dart';
 import 'core/themes/app_theme.dart';
 
 // Halaman-halaman
@@ -23,13 +25,13 @@ void main() async {
   // Tunggu init firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Menghapus Sesi
-  try {
-    await FirebaseAuth.instance.signOut();
-    print("Sesi Firebase berhasil dihapus saat aplikasi dimulai ulang.");
-  } catch (e) {
-    print("Gagal menghapus sesi: $e");
-  }
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
+  );
+
+  // Sesi akan bertahan otomatis (Persistence)
   // =========================================================
 
   // Init camera
@@ -62,9 +64,9 @@ class MyApp extends StatelessWidget {
       ),
 
       // LOGIKA PENENTUAN HALAMAN UTAMA
-      home: StreamBuilder<User?>(
-        // Karena kita memanggil signOut() di main, stream ini akan segera mengembalikan null.
-        stream: FirebaseAuth.instance.authStateChanges(),
+      home: StreamBuilder<AuthState>(
+        // Menggunakan stream dari Supabase
+        stream: Supabase.instance.client.auth.onAuthStateChange,
         builder: (context, snapshot) {
           // 1. Tampilkan Loading saat koneksi belum siap
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -73,13 +75,13 @@ class MyApp extends StatelessWidget {
             );
           }
 
-          // 2. Karena signOut() dipanggil di main, ini akan menjadi null.
-          if (snapshot.hasData && snapshot.data != null) {
-            // Jika Anda ingin menguji login, hapus baris signOut() di main.
+          // 2. Cek apakah ada sesi user (Auth Session)
+          final session = snapshot.data?.session;
+          if (session != null) {
             return const HomePage(username: "User");
           }
 
-          // 3. Jika user BELUM LOGIN (snapshot.data == null) -> Pindah ke Onboarding
+          // 3. Jika user BELUM LOGIN -> Pindah ke Onboarding
           return const OnboardingPage();
         },
       ),

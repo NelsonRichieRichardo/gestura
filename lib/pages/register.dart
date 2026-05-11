@@ -1,8 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:country_picker/country_picker.dart'; // Import Package Country Picker
 
 // Core imports
@@ -80,27 +79,20 @@ class _RegisterPageState extends State<RegisterPage> {
     LoadingOverlay.show(context);
 
     try {
-      // A. Buat Akun di Authentication
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-
-      String uid = userCredential.user!.uid;
-
       // B. Siapkan data (Gabungkan kode negara + nomor HP)
       // selectedCountry.phoneCode mengambil kode otomatis (misal 62)
       String fullPhoneNumber = "+${selectedCountry.phoneCode}${_mobileController.text.trim()}";
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'uid': uid,
-        'username': _usernameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'phoneNumber': fullPhoneNumber,
-        'countryCode': selectedCountry.countryCode, // Misal: ID, US, MY
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      // A. Buat Akun di Supabase Authentication
+      final AuthResponse res = await Supabase.instance.client.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        data: {
+          'username': _usernameController.text.trim(),
+          'phone_number': fullPhoneNumber,
+          'country_code': selectedCountry.countryCode,
+        }
+      );
 
       if (!mounted) return;
 
@@ -121,19 +113,11 @@ class _RegisterPageState extends State<RegisterPage> {
         MaterialPageRoute(builder: (context) => const LoginPage())
       );
 
-    } on FirebaseAuthException catch (e) {
+    } on AuthException catch (e) {
       if (mounted) {
         LoadingOverlay.hide(context);
-        String message = "Registration failed";
-        if (e.code == 'weak-password') {
-          message = 'The password provided is too weak.';
-        } else if (e.code == 'email-already-in-use') {
-          message = 'The account already exists for that email.';
-        } else if (e.code == 'invalid-email') {
-          message = 'The email address is not valid.';
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: Colors.red),
+          SnackBar(content: Text("Registration failed: ${e.message}"), backgroundColor: Colors.red),
         );
       }
     } catch (e) {

@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gestura/core/themes/app_theme.dart'; 
 
-class DictionaryDetailPage extends StatelessWidget {
+class DictionaryDetailPage extends StatefulWidget {
   final String sign;
   final String description;
 
@@ -11,6 +12,41 @@ class DictionaryDetailPage extends StatelessWidget {
     required this.sign,
     required this.description,
   });
+
+  @override
+  State<DictionaryDetailPage> createState() => _DictionaryDetailPageState();
+}
+
+class _DictionaryDetailPageState extends State<DictionaryDetailPage> {
+  int _currentIndex = 0;
+  Timer? _timer;
+  late List<String> _characters;
+  late bool _isWord;
+
+  @override
+  void initState() {
+    super.initState();
+    _isWord = widget.sign.length > 1;
+    if (_isWord) {
+      _characters = widget.sign.split('');
+      _startAnimation();
+    }
+  }
+
+  void _startAnimation() {
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _currentIndex = (_currentIndex + 1) % _characters.length;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   // --- HELPER 1: WIDGET TILE DENGAN PARAMETER UKURAN BARU ---
   Widget _buildSignTileForList(BuildContext context, String char, {double size = 120}) {
@@ -86,51 +122,72 @@ class DictionaryDetailPage extends StatelessWidget {
 
   // --- HELPER 2: KONTEN GAMBAR UTAMA (Logika A-Z dan Kata/Kalimat) ---
   Widget _buildSignContent(BuildContext context) {
-    final isLetter = sign.length == 1;
     final screenWidth = MediaQuery.of(context).size.width;
+    final largeSize = screenWidth * 0.8; 
 
-    if (isLetter) {
+    if (!_isWord) {
       // 1. LOGIKA UNTUK HURUF A-Z (Satu GIF BESAR)
-      
-      // UKURAN BARU: 80% dari lebar layar
-      final largeSize = screenWidth * 0.8; 
-
       return Center(
         child: Container(
           width: largeSize,
           height: largeSize,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(30), // Sudut lebih besar untuk tampilan premium
+            borderRadius: BorderRadius.circular(30), 
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 30)],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(30),
-            // MEMANGGIL TILE DENGAN UKURAN BESAR BARU
-            child: _buildSignTileForList(context, sign.toLowerCase(), size: largeSize), 
+            child: _buildSignTileForList(context, widget.sign.toLowerCase(), size: largeSize), 
           ),
         ),
       );
     } else {
-      // 2. LOGIKA UNTUK KATA/KALIMAT (List Horizontal GIF)
+      // 2. LOGIKA UNTUK KATA/KALIMAT (Huruf per Huruf Beranimasi)
+      String char = _characters[_currentIndex];
       
-      final characters = sign.split('').toList();
-
-      return Center(
-        child: SizedBox(
-          height: screenWidth * 0.45,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            shrinkWrap: true,
-            padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
-            itemCount: characters.length,
-            itemBuilder: (context, index) {
-              String char = characters[index];
-              // MEMANGGIL TILE DENGAN UKURAN KECIL (default 120)
-              return _buildSignTileForList(context, char.toLowerCase()); 
-            },
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+              child: Container(
+                key: ValueKey<int>(_currentIndex),
+                width: largeSize,
+                height: largeSize,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30), 
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 30)],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(30),
+                  child: _buildSignTileForList(context, char.toLowerCase(), size: largeSize), 
+                ),
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 20),
+          // Indikator Huruf Aktif (Bulatan kecil)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(_characters.length, (index) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: _currentIndex == index ? 20 : 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: _currentIndex == index ? primaryColor : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              );
+            }),
+          )
+        ],
       );
     }
   }
@@ -187,7 +244,7 @@ class DictionaryDetailPage extends StatelessWidget {
                     children: [
                       // Judul Utama (Huruf/Kata)
                       Text(
-                        sign,
+                        widget.sign,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           fontSize: responsiveFont(context, 40),
@@ -208,9 +265,9 @@ class DictionaryDetailPage extends StatelessWidget {
                       SizedBox(height: responsiveHeight(context, 0.03)),
 
                       // Label Ejaan (Hanya untuk Kata/Kalimat)
-                      if (sign.length > 1) 
+                      if (_isWord) 
                         Text(
-                          "Spelling: ${sign.toUpperCase().replaceAll(' ', ' ')}",
+                          "Spelling: ${widget.sign.toUpperCase().replaceAll(' ', ' ')}",
                           style: GoogleFonts.poppins(
                             fontSize: responsiveFont(context, 14),
                             fontWeight: FontWeight.w600,
@@ -223,7 +280,7 @@ class DictionaryDetailPage extends StatelessWidget {
 
                       // Deskripsi
                       Text(
-                        description,
+                        widget.description,
                         textAlign: TextAlign.center,
                         style: bodyText.copyWith(
                           fontSize: responsiveFont(context, 15),

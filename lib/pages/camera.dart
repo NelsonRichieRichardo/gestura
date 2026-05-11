@@ -7,11 +7,12 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:hand_landmarker/hand_landmarker.dart';
 import 'dart:typed_data';
 import 'package:gestura/core/themes/app_theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
-// ---------------------------------------------
 
 class CameraPage extends StatefulWidget {
-  const CameraPage({super.key});
+  final bool isActive;
+  const CameraPage({super.key, this.isActive = true});
 
   @override
   State<CameraPage> createState() => _CameraPageState();
@@ -41,17 +42,22 @@ class _CameraPageState extends State<CameraPage> {
   int selectedCameraIndex = 0;
   bool _isInitialized = false;
   bool _hasInitializationError = false;
+  String _initializationErrorMessage = "";
   bool _isDetecting = false;
 
   // --- LANDMARK DATA UNTUK PAINTER ---
-  List<Hand> _currentHands = [];
+  final ValueNotifier<List<Hand>> _handsNotifier = ValueNotifier<List<Hand>>([]);
   Size _previewSize = Size.zero;
   CameraLensDirection _lensDirection = CameraLensDirection.front;
   int _sensorOrientation = 0;
+  
+  // --- PERFORMANCE OPTIMIZATION ---
+  int _frameCounter = 0;
+  final int _PROCESS_EVERY_N_FRAME = 3; // Proses setiap 3 frame agar tidak lag
 
   // --- LOGIC DETEKSI & TRANSLATE ---
-  String _outputLabel = "Tunggu Deteksi...";
-  String _confidence = "";
+  final ValueNotifier<String> _outputLabelNotifier = ValueNotifier<String>("Tunggu Deteksi...");
+  final ValueNotifier<String> _confidenceNotifier = ValueNotifier<String>("");
 
   bool _showGifView = false;
   String _translatedText = "";
@@ -80,14 +86,26 @@ class _CameraPageState extends State<CameraPage> {
         _isUserTyping = _inputFocusNode.hasFocus;
         if (_isUserTyping) {
           _controller?.stopImageStream();
-          _currentHands.clear();
+          _handsNotifier.value = [];
           // ✅ PERBAIKAN: JANGAN clear sequence buffer, biarkan tetap ada
           // _sequenceBuffer.clear(); // DIHAPUS
-        } else if (_isInitialized && _isModelLoaded && !_showGifView) {
+        } else if (_isInitialized && _isModelLoaded && !_showGifView && widget.isActive) {
           _startImageStream();
         }
       });
     });
+  }
+
+  @override
+  void didUpdateWidget(CameraPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        _startImageStream();
+      } else {
+        _stopImageStream();
+      }
+    }
   }
 
   // --- 1. MEMUAT MODEL (TFLITE) ---
@@ -125,10 +143,9 @@ class _CameraPageState extends State<CameraPage> {
 
   // --- INISIALISASI CAMERA & PLUGIN ---
   Future<void> _initialize() async {
-    final camera = cameras.firstWhere(
-      (cam) => cam.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
+    if (cameras.isEmpty) return;
+    
+    final camera = cameras[selectedCameraIndex];
 
     _controller = CameraController(
       camera,
@@ -140,7 +157,7 @@ class _CameraPageState extends State<CameraPage> {
     _plugin = HandLandmarkerPlugin.create(
       numHands: 1,
       minHandDetectionConfidence: 0.5,
-      delegate: HandLandmarkerDelegate.GPU,
+      delegate: HandLandmarkerDelegate.CPU, // MENGGUNAKAN CPU AGAR TIDAK CRASH DI HP XIAOMI
     );
 
     _initializeControllerFuture = _controller!
@@ -151,7 +168,9 @@ class _CameraPageState extends State<CameraPage> {
             _lensDirection = _controller!.description.lensDirection;
             _sensorOrientation = _controller!.description.sensorOrientation;
 
-            await _controller!.startImageStream(_processCameraImage);
+            if (widget.isActive) {
+              await _controller!.startImageStream(_processCameraImage);
+            }
 
             if (mounted) {
               setState(() => _isInitialized = true);
@@ -163,6 +182,7 @@ class _CameraPageState extends State<CameraPage> {
           if (mounted) {
             setState(() {
               _hasInitializationError = true;
+              _initializationErrorMessage = error.toString();
               _isInitialized = false;
             });
           }
@@ -174,7 +194,9 @@ class _CameraPageState extends State<CameraPage> {
     _controller?.stopImageStream();
     _controller?.dispose();
     _interpreter?.close();
-    _plugin?.dispose();
+    _handsNotifier.dispose();
+    _outputLabelNotifier.dispose();
+    _confidenceNotifier.dispose();
     _textController.dispose();
     _inputFocusNode.dispose();
     super.dispose();
@@ -182,6 +204,9 @@ class _CameraPageState extends State<CameraPage> {
 
   // --- 2. LOGIC PEMROSESAN FRAME ---
   Future<void> _processCameraImage(CameraImage image) async {
+    _frameCounter++;
+    if (_frameCounter % _PROCESS_EVERY_N_FRAME != 0) return;
+
     if (_isDetecting || !_isInitialized || _plugin == null) return;
     _isDetecting = true;
 
@@ -191,9 +216,7 @@ class _CameraPageState extends State<CameraPage> {
         _controller!.description.sensorOrientation,
       );
 
-      if (mounted) {
-        setState(() => _currentHands = hands);
-      }
+      _handsNotifier.value = hands;
 
       // --- EKSTRAKSI KEYPOINT & INFERENSI TFLITE ---
       if (hands.isNotEmpty && _interpreter != null) {
@@ -257,9 +280,6 @@ class _CameraPageState extends State<CameraPage> {
           String detectedChar = _labels[maxIndex];
           String confStr = (maxConfidence * 100).toStringAsFixed(0) + "%";
 
-          // ✅ DEBUGGING: Print hasil deteksi
-          print("🔍 Detected: $detectedChar | Confidence: $confStr");
-
           // Simple voting untuk mengurangi jitter
           _recentDetections.add(detectedChar);
           if (_recentDetections.length > _VOTING_WINDOW) {
@@ -271,15 +291,14 @@ class _CameraPageState extends State<CameraPage> {
             counts[s] = (counts[s] ?? 0) + 1;
           }
 
-          // ✅ PERBAIKAN: Accept jika muncul minimal 1x (dari 2x)
           String? voted;
           counts.forEach((k, v) {
-            if (v >= 1) voted = k; // Turun dari 2 ke 1
+            if (v >= 1) voted = k; 
           });
 
           if (voted != null) {
-            _outputLabel = voted!;
-            _confidence = confStr;
+            _outputLabelNotifier.value = voted!;
+            _confidenceNotifier.value = confStr;
 
             String currentText = _textController.text;
             String lastChar = currentText.isNotEmpty
@@ -295,12 +314,12 @@ class _CameraPageState extends State<CameraPage> {
               _recentDetections.clear();
             }
           } else {
-            _outputLabel = "Menunggu stabilitas...";
-            _confidence = confStr;
+            _outputLabelNotifier.value = "Menunggu stabilitas...";
+            _confidenceNotifier.value = confStr;
           }
         } else {
-          _outputLabel = "Tunggu Deteksi...";
-          _confidence = "";
+          _outputLabelNotifier.value = "Tunggu Deteksi...";
+          _confidenceNotifier.value = "";
           if (_recentDetections.isNotEmpty) _recentDetections.clear();
         }
       });
@@ -352,12 +371,18 @@ class _CameraPageState extends State<CameraPage> {
   // --- 5. STREAM CONTROL ---
   void _startImageStream() {
     if (_controller == null || !_controller!.value.isInitialized) return;
-    if (!_controller!.value.isStreamingImages) {
+    if (!_controller!.value.isStreamingImages && widget.isActive) {
       _controller!.startImageStream(_processCameraImage);
     }
   }
 
-  void _translateTextToSign() {
+  void _stopImageStream() {
+    if (_controller != null && _controller!.value.isStreamingImages) {
+      _controller!.stopImageStream();
+    }
+  }
+
+  void _translateTextToSign() async {
     String text = _textController.text.trim().toLowerCase();
     if (text.isEmpty) return;
 
@@ -367,9 +392,28 @@ class _CameraPageState extends State<CameraPage> {
     setState(() {
       _translatedText = text;
       _showGifView = true;
-      _outputLabel = "Mode Terjemahan";
-      _confidence = "";
+      _outputLabelNotifier.value = "Mode Terjemahan";
+      _confidenceNotifier.value = "";
     });
+
+    try {
+      final supabase = Supabase.instance.client;
+      final session = supabase.auth.currentSession;
+      if (session != null) {
+          await supabase.from('history_items').insert({
+            'user_id': session.user.id,
+            'title': 'Translated \'${text.toUpperCase()}\'',
+            'subtitle': 'Camera Mode',
+            'time_label': 'Just now',
+            'icon_name': 'translate_rounded',
+            'color_hex': '0xFF4CAF50',
+            'item_type': 'translation',
+            'detail_payload': text.toUpperCase()
+          });
+      }
+    } catch (e) {
+      print('Error saving history: $e');
+    }
   }
 
   void _closeTranslateView() {
@@ -378,8 +422,8 @@ class _CameraPageState extends State<CameraPage> {
       _textController.clear();
       _translatedText = "";
       _sequenceBuffer.clear();
-      _currentHands.clear();
-      _outputLabel = "Tunggu Deteksi...";
+      _handsNotifier.value = [];
+      _outputLabelNotifier.value = "Tunggu Deteksi...";
     });
     if (_isInitialized && _isModelLoaded) {
       _startImageStream();
@@ -513,16 +557,23 @@ class _CameraPageState extends State<CameraPage> {
                   child: Stack(
                     children: [
                       CameraPreview(controller),
-                      if (_currentHands.isNotEmpty && _previewSize != Size.zero)
-                        CustomPaint(
-                          size: Size.infinite,
-                          painter: LandmarkPainter(
-                            hands: _currentHands,
-                            previewSize: _previewSize,
-                            lensDirection: _lensDirection,
-                            sensorOrientation: _sensorOrientation,
-                          ),
-                        ),
+                      ValueListenableBuilder<List<Hand>>(
+                        valueListenable: _handsNotifier,
+                        builder: (context, hands, _) {
+                          if (hands.isEmpty || _previewSize == Size.zero) {
+                            return const SizedBox.shrink();
+                          }
+                          return CustomPaint(
+                            size: Size.infinite,
+                            painter: LandmarkPainter(
+                              hands: hands,
+                              previewSize: _previewSize,
+                              lensDirection: _lensDirection,
+                              sensorOrientation: _sensorOrientation,
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -531,9 +582,13 @@ class _CameraPageState extends State<CameraPage> {
           );
         } else if (_hasInitializationError) {
           return Center(
-            child: Text(
-              "Gagal memuat kamera. Pastikan izin sudah diberikan.",
-              style: bodyText,
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Text(
+                "Gagal memuat kamera.\nDetail: $_initializationErrorMessage",
+                textAlign: TextAlign.center,
+                style: bodyText.copyWith(color: dangerColor),
+              ),
             ),
           );
         }
@@ -601,7 +656,7 @@ class _CameraPageState extends State<CameraPage> {
                                 selectedCameraIndex =
                                     (selectedCameraIndex + 1) % cameras.length;
                                 _isInitialized = false;
-                                _currentHands.clear();
+                                _handsNotifier.value = [];
                                 _sequenceBuffer.clear();
                                 _recentDetections.clear();
                               });
@@ -637,9 +692,7 @@ class _CameraPageState extends State<CameraPage> {
                         ),
 
                       // Label Deteksi di Bawah
-                      if (!_showGifView &&
-                          !_isUserTyping &&
-                          _outputLabel.isNotEmpty)
+                      if (!_showGifView && !_isUserTyping)
                         Align(
                           alignment: Alignment.bottomCenter,
                           child: Container(
@@ -652,15 +705,30 @@ class _CameraPageState extends State<CameraPage> {
                               color: accentColor.withOpacity(0.85),
                               borderRadius: BorderRadius.circular(30),
                             ),
-                            child: Text(
-                              _confidence.isNotEmpty
-                                  ? "Terdeteksi: $_outputLabel ($_confidence)"
-                                  : "Status: $_outputLabel",
-                              style: bodyText.copyWith(
-                                color: backgroundColor,
-                                fontWeight: bold,
-                                fontSize: responsiveFont(context, 14),
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ValueListenableBuilder<String>(
+                                  valueListenable: _outputLabelNotifier,
+                                  builder: (context, label, _) {
+                                    return ValueListenableBuilder<String>(
+                                      valueListenable: _confidenceNotifier,
+                                      builder: (context, confidence, _) {
+                                        return Text(
+                                          confidence.isNotEmpty
+                                              ? "Terdeteksi: $label ($confidence)"
+                                              : "Status: $label",
+                                          style: bodyText.copyWith(
+                                            color: backgroundColor,
+                                            fontWeight: bold,
+                                            fontSize: responsiveFont(context, 14),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         ),
